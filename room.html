@@ -58,7 +58,7 @@
             border-radius: 40px;
             font-size: 13px;
         }
-        /* Main layout: videos + chat */
+        /* Main layout */
         .main-container {
             flex: 1;
             display: flex;
@@ -97,6 +97,41 @@
             border-radius: 20px;
             font-size: 12px;
             font-weight: 500;
+        }
+        .host-badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(124,111,247,0.8);
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        .muted-badge {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+        }
+        .video-card .controls-overlay {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            display: flex;
+            gap: 6px;
+        }
+        .host-action-btn {
+            background: rgba(0,0,0,0.7);
+            border: none;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 16px;
+            font-size: 11px;
+            cursor: pointer;
         }
         /* Chat panel */
         .chat-panel {
@@ -252,20 +287,24 @@
 </div>
 
 <script>
-    // Obtener parámetros de URL
+    // Obtener datos de identidad de la URL
     const roomId = '{{ROOM_ID}}';
     const urlParams = new URLSearchParams(window.location.search);
-    let myUsername = urlParams.get('name') || 'Anónimo';
-    myUsername = decodeURIComponent(myUsername);
-    
+    let myName = urlParams.get('name') || 'Anónimo';
+    let myRole = urlParams.get('role') || '';
+    const myDisplay = myRole ? `${myName} (${myRole})` : myName;
+
     const WS_URL = `wss://${window.location.host}/ws/${roomId}`;
     let socket = null;
     let localStream = null;
-    let peers = {};        // userId -> RTCPeerConnection
+    let peers = {};          // userId -> RTCPeerConnection
+    let peersInfo = {};      // userId -> { display, isHost, muted }
     let callStarted = false;
     let micEnabled = true;
     let camEnabled = true;
-    let myUserId = null;   // se asignará al recibir el primer mensaje
+    let myUserId = null;
+    let amIHost = false;
+    let hostId = null;
 
     const videosGrid = document.getElementById('videosGrid');
     const participantsSpan = document.getElementById('participantsCount');
@@ -307,7 +346,7 @@
         });
     }
 
-    function createVideoElement(userId, username, isLocal = false) {
+    function createVideoElement(userId, displayName, isLocal = false, isHost = false, isMuted = false) {
         const container = document.createElement('div');
         container.className = 'video-card';
         container.id = `video-${userId}`;
@@ -317,9 +356,52 @@
         if (isLocal) video.muted = true;
         const label = document.createElement('div');
         label.className = 'video-label';
-        label.innerText = isLocal ? `Tú (${username})` : username;
+        label.innerText = isLocal ? `Tú (${displayName})` : displayName;
         container.appendChild(video);
         container.appendChild(label);
+        if (isHost && !isLocal) {
+            const hostBadge = document.createElement('div');
+            hostBadge.className = 'host-badge';
+            hostBadge.innerText = 'Anfitrión';
+            container.appendChild(hostBadge);
+        }
+        if (isMuted && !isLocal) {
+            const mutedBadge = document.createElement('div');
+            mutedBadge.className = 'muted-badge';
+            mutedBadge.innerText = '🔇 Silenciado';
+            container.appendChild(mutedBadge);
+        }
+        // Si soy el anfitrión y el usuario no soy yo, mostrar botones de silenciar/expulsar
+        if (amIHost && !isLocal) {
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'controls-overlay';
+            const muteBtn = document.createElement('button');
+            muteBtn.className = 'host-action-btn';
+            muteBtn.innerText = isMuted ? '🔊 Activar' : '🔇 Silenciar';
+            muteBtn.onclick = (e) => {
+                e.stopPropagation();
+                socket.send(JSON.stringify({
+                    type: 'host-mute',
+                    targetId: userId,
+                    mute: !isMuted
+                }));
+            };
+            const kickBtn = document.createElement('button');
+            kickBtn.className = 'host-action-btn';
+            kickBtn.innerText = '🚫 Expulsar';
+            kickBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (confirm(`¿Expulsar a ${displayName}?`)) {
+                    socket.send(JSON.stringify({
+                        type: 'host-kick',
+                        targetId: userId
+                    }));
+                }
+            };
+            controlsDiv.appendChild(muteBtn);
+            controlsDiv.appendChild(kickBtn);
+            container.appendChild(controlsDiv);
+        }
         videosGrid.appendChild(container);
         return { container, video };
     }
@@ -327,21 +409,6 @@
     function removeVideoElement(userId) {
         const el = document.getElementById(`video-${userId}`);
         if (el) el.remove();
-    }
-
-    // Reconstruir conexiones con todos los peers existentes después de obtener localStream
-    async function rebuildConnections() {
-        if (!localStream || !callStarted) return;
-        const existingUserIds = Object.keys(peers);
-        for (const userId of existingUserIds) {
-            // Cerrar y eliminar peer antiguo
-            if (peers[userId]) {
-                peers[userId].close();
-                delete peers[userId];
-            }
-            // Crear nueva conexión como iniciador
-            await createPeerConnection(userId, true);
-        }
     }
 
     async function createPeerConnection(remoteUserId, isInitiator = true) {
@@ -359,9 +426,8 @@
             let container = document.getElementById(`video-${remoteUserId}`);
             let video;
             if (!container) {
-                // Buscar el nombre de usuario desde peersInfo (lo guardaremos aparte)
-                const username = peersInfo[remoteUserId] || `Usuario ${remoteUserId.substring(0,6)}`;
-                const newEl = createVideoElement(remoteUserId, username, false);
+                const info = peersInfo[remoteUserId] || { display: `Usuario ${remoteUserId.substring(0,6)}`, isHost: false, muted: false };
+                const newEl = createVideoElement(remoteUserId, info.display, false, info.isHost, info.muted);
                 container = newEl.container;
                 video = newEl.video;
             } else {
@@ -389,7 +455,6 @@
                     delete peers[remoteUserId];
                     removeVideoElement(remoteUserId);
                     updateParticipantsCount();
-                    showToast(`Usuario ${peersInfo[remoteUserId] || 'desconocido'} se desconectó`);
                 }
             }
         };
@@ -407,41 +472,86 @@
         return pc;
     }
 
-    let peersInfo = {}; // userId -> username
-
     async function handleSignalingMessage(msg) {
         switch (msg.type) {
             case 'existing-users':
-                // Guardar info de usuarios existentes
+                myUserId = msg.senderId; // puede venir implícito, pero mejor guardarlo luego
+                amIHost = msg.isHost;
+                hostId = msg.hostId;
                 for (const user of msg.users) {
-                    peersInfo[user.userId] = user.username;
+                    peersInfo[user.userId] = { display: user.display, isHost: user.isHost, muted: user.muted };
                     if (localStream && callStarted && !peers[user.userId]) {
                         await createPeerConnection(user.userId, true);
                     }
                 }
+                updateParticipantsCount();
                 break;
             case 'user-joined':
-                peersInfo[msg.userId] = msg.username;
+                peersInfo[msg.userId] = { display: msg.display, isHost: msg.isHost, muted: msg.muted };
                 if (localStream && callStarted && !peers[msg.userId]) {
                     await createPeerConnection(msg.userId, true);
                 }
-                addChatMessage('Sistema', `${msg.username} se ha unido a la sala`, true);
+                addChatMessage('Sistema', `${msg.display} se ha unido a la sala`, true);
+                updateParticipantsCount();
                 break;
             case 'user-left':
                 if (peers[msg.userId]) {
                     peers[msg.userId].close();
                     delete peers[msg.userId];
                     removeVideoElement(msg.userId);
-                    updateParticipantsCount();
                 }
                 if (peersInfo[msg.userId]) {
-                    addChatMessage('Sistema', `${peersInfo[msg.userId]} ha salido de la sala`, true);
+                    addChatMessage('Sistema', `${peersInfo[msg.userId].display} ha salido de la sala`, true);
                     delete peersInfo[msg.userId];
                 }
+                updateParticipantsCount();
+                break;
+            case 'host-info':
+                hostId = msg.hostId;
+                amIHost = (myUserId === hostId);
+                // Actualizar badges de host en las tarjetas
+                for (const [uid, info] of Object.entries(peersInfo)) {
+                    info.isHost = (uid === hostId);
+                    // Refrescar UI (simple: recargar las tarjetas? Mejor no, solo actualizar visualmente)
+                    const card = document.getElementById(`video-${uid}`);
+                    if (card) {
+                        let badge = card.querySelector('.host-badge');
+                        if (info.isHost && !badge) {
+                            const newBadge = document.createElement('div');
+                            newBadge.className = 'host-badge';
+                            newBadge.innerText = 'Anfitrión';
+                            card.appendChild(newBadge);
+                        } else if (!info.isHost && badge) badge.remove();
+                    }
+                }
+                if (amIHost) showToast('Ahora eres el anfitrión. Puedes silenciar o expulsar participantes.');
+                break;
+            case 'user-muted':
+                if (peersInfo[msg.userId]) {
+                    peersInfo[msg.userId].muted = msg.muted;
+                    // Actualizar badge visual en la tarjeta
+                    const card = document.getElementById(`video-${msg.userId}`);
+                    if (card) {
+                        let mutedBadge = card.querySelector('.muted-badge');
+                        if (msg.muted && !mutedBadge) {
+                            const badge = document.createElement('div');
+                            badge.className = 'muted-badge';
+                            badge.innerText = '🔇 Silenciado';
+                            card.appendChild(badge);
+                        } else if (!msg.muted && mutedBadge) mutedBadge.remove();
+                        // También actualizar texto del botón si soy host
+                        const muteBtn = card.querySelector('.host-action-btn:first-child');
+                        if (muteBtn) muteBtn.innerText = msg.muted ? '🔊 Activar' : '🔇 Silenciar';
+                    }
+                }
+                break;
+            case 'kicked':
+                showToast(msg.reason);
+                setTimeout(() => window.location.href = '/', 2000);
                 break;
             case 'offer':
                 if (!peers[msg.senderId]) {
-                    peersInfo[msg.senderId] = msg.senderName || `Usuario ${msg.senderId.substring(0,6)}`;
+                    peersInfo[msg.senderId] = { display: msg.senderName || `Usuario ${msg.senderId.substring(0,6)}`, isHost: false, muted: false };
                     await createPeerConnection(msg.senderId, false);
                 }
                 const pcOffer = peers[msg.senderId];
@@ -469,16 +579,18 @@
                 }
                 break;
             case 'chat':
-                addChatMessage(msg.senderName, msg.message, false);
+                addChatMessage(msg.senderName || msg.senderDisplay, msg.message, false);
                 break;
+        }
+        if (msg.senderId && !myUserId && msg.type !== 'existing-users') {
+            // Podríamos asignar myUserId más tarde, pero normalmente llegará en existing-users
         }
     }
 
     function connectWebSocket() {
         socket = new WebSocket(WS_URL);
         socket.onopen = () => {
-            // Enviar mi nombre de usuario
-            socket.send(JSON.stringify({ username: myUsername }));
+            socket.send(JSON.stringify({ name: myName, role: myRole }));
             showToast('Conectado al servidor');
         };
         socket.onmessage = async (e) => {
@@ -497,12 +609,16 @@
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             // Crear mi propio video
-            const { video } = createVideoElement('local', myUsername, true);
+            const { video } = createVideoElement('local', myDisplay, true, amIHost, false);
             video.srcObject = localStream;
             callStarted = true;
 
-            // Reconstruir conexiones con peers existentes (si los hay)
-            await rebuildConnections();
+            // Conectar con todos los peers existentes
+            for (const userId in peersInfo) {
+                if (!peers[userId]) {
+                    await createPeerConnection(userId, true);
+                }
+            }
             updateParticipantsCount();
             showToast('Cámara y micrófono activados');
         } catch (err) {
@@ -520,13 +636,11 @@
             peers[userId].close();
             delete peers[userId];
         }
-        // Limpiar videos excepto el mío? Mejor limpiar todo y recargar la página para evitar estados inconsistentes
         videosGrid.innerHTML = '';
         callStarted = false;
         updateParticipantsCount();
         showToast('Llamada finalizada');
-        // Recargar la página para resetear el estado
-        setTimeout(() => window.location.reload(), 1000);
+        // No recargamos, solo paramos. El usuario puede volver a iniciar.
     }
 
     function toggleMic() {

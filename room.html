@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>VideoCall - Sala {{ROOM_ID}}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0a0a10;
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .header {
+            background: #18181f;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2a2a35;
+        }
+        .room-info {
+            font-size: 14px;
+            background: #2a2a35;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-family: monospace;
+        }
+        .copy-btn {
+            background: #3a3a48;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        .videos-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 12px;
+            padding: 20px;
+            overflow-y: auto;
+            background: #0f0f13;
+        }
+        .video-container {
+            background: #1c1c26;
+            border-radius: 16px;
+            overflow: hidden;
+            position: relative;
+            aspect-ratio: 16/9;
+            border: 1px solid #2a2a35;
+        }
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .video-label {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            backdrop-filter: blur(4px);
+        }
+        .controls {
+            background: #18181f;
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            border-top: 1px solid #2a2a35;
+        }
+        .ctrl-btn {
+            background: #2a2a35;
+            border: none;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            transition: 0.2s;
+        }
+        .ctrl-btn.danger { background: #c23535; }
+        .ctrl-btn.primary { background: #7c6ff7; }
+        .ctrl-btn:hover { transform: scale(0.95); filter: brightness(1.1); }
+        .participants-count { font-size: 12px; background: #2a2a35; padding: 4px 10px; border-radius: 20px; }
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2a2a35;
+            padding: 10px 20px;
+            border-radius: 30px;
+            animation: fadeOut 2s forwards;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        }
+        @media (max-width: 600px) {
+            .videos-grid { grid-template-columns: 1fr; padding: 10px; }
+            .ctrl-btn { width: 40px; height: 40px; font-size: 16px; }
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div>
+        <span>🎥 Sala: </span>
+        <span class="room-info" id="roomIdDisplay">{{ROOM_ID}}</span>
+        <button class="copy-btn" id="copyBtn">📋 Copiar ID</button>
+    </div>
+    <div class="participants-count" id="participantsCount">Participantes: 1</div>
+</div>
+<div class="videos-grid" id="videosGrid"></div>
+<div class="controls">
+    <button class="ctrl-btn" id="micBtn">🎤</button>
+    <button class="ctrl-btn" id="camBtn">📷</button>
+    <button class="ctrl-btn primary" id="startCallBtn">📞 Iniciar</button>
+    <button class="ctrl-btn danger" id="hangupBtn">❌ Colgar</button>
+</div>
+
+<script>
+    const roomId = '{{ROOM_ID}}';
+    const WS_URL = `wss://${window.location.host}/ws/${roomId}`;
+    let socket, localStream;
+    let peers = {};  // userId -> RTCPeerConnection
+    let micEnabled = true, camEnabled = true, callActive = false;
+    const videosGrid = document.getElementById('videosGrid');
+    const participantsCountSpan = document.getElementById('participantsCount');
+    let localVideoElement = null;
+
+    function showToast(msg) {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerText = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+    }
+
+    function updateParticipantsCount() {
+        const count = Object.keys(peers).length + (localStream ? 1 : 0);
+        participantsCountSpan.innerText = `Participantes: ${count}`;
+    }
+
+    function createVideoElement(userId, isLocal = false) {
+        const container = document.createElement('div');
+        container.className = 'video-container';
+        container.id = `video-${userId}`;
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+        if (isLocal) video.muted = true;
+        const label = document.createElement('div');
+        label.className = 'video-label';
+        label.innerText = isLocal ? 'Tú' : `Usuario ${userId.substring(0, 6)}`;
+        container.appendChild(video);
+        container.appendChild(label);
+        videosGrid.appendChild(container);
+        return { container, video };
+    }
+
+    function removeVideoElement(userId) {
+        const el = document.getElementById(`video-${userId}`);
+        if (el) el.remove();
+    }
+
+    async function createPeerConnection(remoteUserId, isInitiator = true) {
+        if (peers[remoteUserId]) return peers[remoteUserId];
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        peers[remoteUserId] = pc;
+
+        if (localStream) {
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        }
+
+        pc.ontrack = (event) => {
+            let container = document.getElementById(`video-${remoteUserId}`);
+            let video;
+            if (!container) {
+                const newEl = createVideoElement(remoteUserId, false);
+                container = newEl.container;
+                video = newEl.video;
+            } else {
+                video = container.querySelector('video');
+            }
+            if (video.srcObject !== event.streams[0]) {
+                video.srcObject = event.streams[0];
+            }
+        };
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                socket.send(JSON.stringify({
+                    type: 'candidate',
+                    candidate: event.candidate,
+                    target: remoteUserId
+                }));
+            }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                if (peers[remoteUserId]) {
+                    peers[remoteUserId].close();
+                    delete peers[remoteUserId];
+                    removeVideoElement(remoteUserId);
+                    updateParticipantsCount();
+                    showToast(`Usuario ${remoteUserId.substring(0,6)} desconectado`);
+                }
+            }
+        };
+
+        if (isInitiator && localStream && callActive) {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.send(JSON.stringify({
+                type: 'offer',
+                offer: offer,
+                target: remoteUserId
+            }));
+        }
+        updateParticipantsCount();
+        return pc;
+    }
+
+    async function handleSignalingMessage(msg) {
+        switch (msg.type) {
+            case 'existing-users':
+                for (const userId of msg.users) {
+                    if (!peers[userId] && localStream && callActive) {
+                        await createPeerConnection(userId, true);
+                    }
+                }
+                break;
+            case 'user-joined':
+                if (localStream && callActive && !peers[msg.userId]) {
+                    await createPeerConnection(msg.userId, true);
+                }
+                break;
+            case 'user-left':
+                if (peers[msg.userId]) {
+                    peers[msg.userId].close();
+                    delete peers[msg.userId];
+                    removeVideoElement(msg.userId);
+                    updateParticipantsCount();
+                }
+                break;
+            case 'offer':
+                if (!peers[msg.sender]) {
+                    await createPeerConnection(msg.sender, false);
+                }
+                const pc = peers[msg.sender];
+                if (pc && !pc.remoteDescription) {
+                    await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    socket.send(JSON.stringify({
+                        type: 'answer',
+                        answer: answer,
+                        target: msg.sender
+                    }));
+                }
+                break;
+            case 'answer':
+                if (peers[msg.target]) {
+                    await peers[msg.target].setRemoteDescription(new RTCSessionDescription(msg.answer));
+                }
+                break;
+            case 'candidate':
+                if (peers[msg.sender]) {
+                    try {
+                        await peers[msg.sender].addIceCandidate(new RTCIceCandidate(msg.candidate));
+                    } catch(e) { console.error('ICE error', e); }
+                }
+                break;
+        }
+    }
+
+    function connectWebSocket() {
+        socket = new WebSocket(WS_URL);
+        socket.onopen = () => showToast('Conectado al servidor');
+        socket.onmessage = async (e) => await handleSignalingMessage(JSON.parse(e.data));
+        socket.onerror = () => showToast('Error de conexión');
+        socket.onclose = () => showToast('Desconectado del servidor');
+    }
+
+    async function startCall() {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const { container, video } = createVideoElement('local', true);
+            localVideoElement = video;
+            video.srcObject = localStream;
+            callActive = true;
+            // Crear conexiones con usuarios ya existentes (si los hay)
+            // Los mensajes 'existing-users' ya se recibieron antes? Puede que sí. Pero si no, esperamos.
+            // Como el WebSocket ya está abierto, los mensajes 'existing-users' ya fueron procesados.
+            // Si no había nadie al inicio, no hay problema.
+            showToast('Cámara activa. Esperando otros participantes...');
+            updateParticipantsCount();
+        } catch(err) {
+            showToast('No se pudo acceder a cámara/micrófono');
+            console.error(err);
+        }
+    }
+
+    function hangUp() {
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+            localStream = null;
+        }
+        for (const userId in peers) {
+            peers[userId].close();
+            delete peers[userId];
+        }
+        document.querySelectorAll('.video-container').forEach(v => v.remove());
+        callActive = false;
+        localVideoElement = null;
+        updateParticipantsCount();
+        showToast('Llamada finalizada');
+    }
+
+    function toggleMic() {
+        if (localStream) {
+            const track = localStream.getAudioTracks()[0];
+            if (track) {
+                micEnabled = !micEnabled;
+                track.enabled = micEnabled;
+                document.getElementById('micBtn').style.opacity = micEnabled ? '1' : '0.5';
+                showToast(micEnabled ? 'Micrófono activado' : 'Micrófono silenciado');
+            }
+        }
+    }
+
+    function toggleCam() {
+        if (localStream) {
+            const track = localStream.getVideoTracks()[0];
+            if (track) {
+                camEnabled = !camEnabled;
+                track.enabled = camEnabled;
+                document.getElementById('camBtn').style.opacity = camEnabled ? '1' : '0.5';
+                showToast(camEnabled ? 'Cámara activada' : 'Cámara apagada');
+            }
+        }
+    }
+
+    // Event listeners
+    document.getElementById('startCallBtn').addEventListener('click', startCall);
+    document.getElementById('hangupBtn').addEventListener('click', hangUp);
+    document.getElementById('micBtn').addEventListener('click', toggleMic);
+    document.getElementById('camBtn').addEventListener('click', toggleCam);
+    document.getElementById('copyBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(roomId);
+        showToast('ID copiado: ' + roomId);
+    });
+    document.getElementById('roomIdDisplay').innerText = roomId;
+
+    connectWebSocket();
+</script>
+</body>
+</html>

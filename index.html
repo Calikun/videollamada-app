@@ -46,6 +46,13 @@
         }
         .input-group {
             margin-bottom: 20px;
+            text-align: left;
+        }
+        .input-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-bottom: 6px;
         }
         input {
             width: 100%;
@@ -110,36 +117,53 @@
 <body>
 <div class="lobby">
     <h1>VideoCall</h1>
-    <div class="subtitle">Conecta con quien quieras, donde quieras</div>
+    <div class="subtitle">Reuniones profesionales en la nube</div>
     <div class="input-group">
-        <input type="text" id="roomIdInput" placeholder="Identificador de sala (ej: proyecto-x)">
+        <label>Tu nombre</label>
+        <input type="text" id="usernameInput" placeholder="Ej: Ana García" maxlength="30">
+    </div>
+    <div class="input-group">
+        <label>ID de sala</label>
+        <input type="text" id="roomIdInput" placeholder="Ej: proyecto-x">
     </div>
     <button id="joinBtn">Unirse a sala</button>
     <div class="divider">o</div>
     <button id="createBtn" class="secondary">Crear nueva sala</button>
-    <div class="info-text">Las salas son temporales y privadas. Comparte el ID con tus participantes.</div>
+    <div class="info-text">Las salas son temporales. Comparte el ID con tus participantes.</div>
 </div>
 <script>
     const joinBtn = document.getElementById('joinBtn');
     const createBtn = document.getElementById('createBtn');
     const roomInput = document.getElementById('roomIdInput');
+    const usernameInput = document.getElementById('usernameInput');
+
+    function getUsername() {
+        let name = usernameInput.value.trim();
+        if (name === "") return "Anónimo";
+        return name.substring(0, 30);
+    }
 
     function joinRoom(roomId) {
         if (!roomId.trim()) {
             alert('Por favor ingresa un ID de sala');
             return;
         }
-        window.location.href = `/room/${encodeURIComponent(roomId)}`;
+        const username = encodeURIComponent(getUsername());
+        window.location.href = `/room/${encodeURIComponent(roomId)}?name=${username}`;
     }
 
     function createRoom() {
         const newId = Math.random().toString(36).substring(2, 10);
-        window.location.href = `/room/${newId}`;
+        const username = encodeURIComponent(getUsername());
+        window.location.href = `/room/${newId}?name=${username}`;
     }
 
     joinBtn.addEventListener('click', () => joinRoom(roomInput.value));
     createBtn.addEventListener('click', createRoom);
     roomInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') joinRoom(roomInput.value);
+    });
+    usernameInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') joinRoom(roomInput.value);
     });
 </script>

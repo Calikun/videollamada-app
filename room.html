@@ -5,11 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>VideoCall · Sala {{ROOM_ID}}</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background: #0a0a10;
@@ -19,7 +15,6 @@
             flex-direction: column;
             overflow: hidden;
         }
-        /* Top bar */
         .topbar {
             background: #18181f;
             padding: 12px 20px;
@@ -47,10 +42,6 @@
             border-radius: 30px;
             font-size: 12px;
             cursor: pointer;
-            transition: 0.2s;
-        }
-        .copy-btn:hover {
-            background: #3a3a48;
         }
         .participants-count {
             background: #1c1c26;
@@ -58,7 +49,6 @@
             border-radius: 40px;
             font-size: 13px;
         }
-        /* Main layout */
         .main-container {
             flex: 1;
             display: flex;
@@ -80,7 +70,6 @@
             position: relative;
             aspect-ratio: 16 / 9;
             border: 1px solid rgba(255,255,255,0.08);
-            transition: all 0.2s;
         }
         .video-card video {
             width: 100%;
@@ -117,13 +106,6 @@
             border-radius: 20px;
             font-size: 11px;
         }
-        .video-card .controls-overlay {
-            position: absolute;
-            bottom: 12px;
-            right: 12px;
-            display: flex;
-            gap: 6px;
-        }
         .host-action-btn {
             background: rgba(0,0,0,0.7);
             border: none;
@@ -132,8 +114,8 @@
             border-radius: 16px;
             font-size: 11px;
             cursor: pointer;
+            margin-left: 4px;
         }
-        /* Chat panel */
         .chat-panel {
             width: 280px;
             background: #18181f;
@@ -146,7 +128,6 @@
             padding: 16px;
             border-bottom: 0.5px solid rgba(255,255,255,0.08);
             font-weight: 600;
-            font-size: 14px;
         }
         .chat-messages {
             flex: 1;
@@ -155,10 +136,6 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
-        }
-        .chat-message {
-            font-size: 13px;
-            word-wrap: break-word;
         }
         .chat-message .sender {
             font-weight: 600;
@@ -184,8 +161,6 @@
             border-radius: 24px;
             padding: 10px 14px;
             color: #fff;
-            font-size: 13px;
-            outline: none;
         }
         .chat-input-area button {
             background: #7c6ff7;
@@ -196,7 +171,6 @@
             font-weight: 600;
             cursor: pointer;
         }
-        /* Controls bar */
         .controls-bar {
             background: #18181f;
             padding: 12px 24px;
@@ -214,21 +188,12 @@
             border-radius: 50%;
             cursor: pointer;
             font-size: 20px;
-            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
         }
-        .ctrl-btn.primary {
-            background: #7c6ff7;
-        }
-        .ctrl-btn.danger {
-            background: #c23535;
-        }
-        .ctrl-btn:hover {
-            transform: scale(0.96);
-            filter: brightness(1.1);
-        }
+        .ctrl-btn.primary { background: #7c6ff7; }
+        .ctrl-btn.danger { background: #c23535; }
         .toast {
             position: fixed;
             bottom: 90px;
@@ -287,417 +252,499 @@
 </div>
 
 <script>
-    // Obtener datos de identidad de la URL
-    const roomId = '{{ROOM_ID}}';
-    const urlParams = new URLSearchParams(window.location.search);
-    let myName = urlParams.get('name') || 'Anónimo';
-    let myRole = urlParams.get('role') || '';
-    const myDisplay = myRole ? `${myName} (${myRole})` : myName;
-
-    const WS_URL = `wss://${window.location.host}/ws/${roomId}`;
-    let socket = null;
-    let localStream = null;
-    let peers = {};          // userId -> RTCPeerConnection
-    let peersInfo = {};      // userId -> { display, isHost, muted }
-    let callStarted = false;
-    let micEnabled = true;
-    let camEnabled = true;
-    let myUserId = null;
-    let amIHost = false;
-    let hostId = null;
-
-    const videosGrid = document.getElementById('videosGrid');
-    const participantsSpan = document.getElementById('participantsCount');
-    const chatMessagesDiv = document.getElementById('chatMessages');
-
-    function showToast(msg) {
-        const toast = document.createElement('div');
-        toast.className = 'toast';
-        toast.innerText = msg;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2500);
-    }
-
-    function updateParticipantsCount() {
-        const count = Object.keys(peers).length + (localStream ? 1 : 0);
-        participantsSpan.innerText = `Participantes: ${count}`;
-    }
-
-    function addChatMessage(sender, message, isSystem = false) {
-        const msgDiv = document.createElement('div');
-        msgDiv.className = 'chat-message';
-        if (isSystem) {
-            msgDiv.classList.add('system');
-            msgDiv.innerText = message;
-        } else {
-            msgDiv.innerHTML = `<span class="sender">${escapeHtml(sender)}</span><span>${escapeHtml(message)}</span>`;
+    (function() {
+        // ----- Configuración -----
+        const roomId = '{{ROOM_ID}}';
+        const urlParams = new URLSearchParams(window.location.search);
+        let myName = urlParams.get('name') || 'Anónimo';
+        let myRole = urlParams.get('role') || '';
+        const myDisplay = myRole ? `${myName} (${myRole})` : myName;
+        const WS_URL = `wss://${window.location.host}/ws/${roomId}`;
+        
+        // ----- Variables globales -----
+        let socket = null;
+        let localStream = null;
+        let myUserId = null;
+        let amIHost = false;
+        let hostId = null;
+        let callActive = false;
+        let micEnabled = true;
+        let camEnabled = true;
+        
+        // peers: map de userId -> { pc, display, isHost, muted, videoElement }
+        let peers = new Map();
+        
+        // Elementos DOM
+        const videosGrid = document.getElementById('videosGrid');
+        const participantsSpan = document.getElementById('participantsCount');
+        const chatMessagesDiv = document.getElementById('chatMessages');
+        
+        // ----- Funciones auxiliares -----
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
         }
-        chatMessagesDiv.appendChild(msgDiv);
-        msgDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
-    }
-
-    function createVideoElement(userId, displayName, isLocal = false, isHost = false, isMuted = false) {
-        const container = document.createElement('div');
-        container.className = 'video-card';
-        container.id = `video-${userId}`;
-        const video = document.createElement('video');
-        video.autoplay = true;
-        video.playsInline = true;
-        if (isLocal) video.muted = true;
-        const label = document.createElement('div');
-        label.className = 'video-label';
-        label.innerText = isLocal ? `Tú (${displayName})` : displayName;
-        container.appendChild(video);
-        container.appendChild(label);
-        if (isHost && !isLocal) {
-            const hostBadge = document.createElement('div');
-            hostBadge.className = 'host-badge';
-            hostBadge.innerText = 'Anfitrión';
-            container.appendChild(hostBadge);
+        
+        function updateParticipantsCount() {
+            let count = 1; // yo mismo
+            if (localStream) count = 1;
+            else count = 0;
+            count += peers.size;
+            participantsSpan.innerText = `Participantes: ${count}`;
         }
-        if (isMuted && !isLocal) {
-            const mutedBadge = document.createElement('div');
-            mutedBadge.className = 'muted-badge';
-            mutedBadge.innerText = '🔇 Silenciado';
-            container.appendChild(mutedBadge);
+        
+        function addChatMessage(sender, message, isSystem = false) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-message';
+            if (isSystem) {
+                msgDiv.classList.add('system');
+                msgDiv.innerText = message;
+            } else {
+                msgDiv.innerHTML = `<span class="sender">${escapeHtml(sender)}</span><span>${escapeHtml(message)}</span>`;
+            }
+            chatMessagesDiv.appendChild(msgDiv);
+            msgDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
         }
-        // Si soy el anfitrión y el usuario no soy yo, mostrar botones de silenciar/expulsar
-        if (amIHost && !isLocal) {
-            const controlsDiv = document.createElement('div');
-            controlsDiv.className = 'controls-overlay';
-            const muteBtn = document.createElement('button');
-            muteBtn.className = 'host-action-btn';
-            muteBtn.innerText = isMuted ? '🔊 Activar' : '🔇 Silenciar';
-            muteBtn.onclick = (e) => {
-                e.stopPropagation();
-                socket.send(JSON.stringify({
-                    type: 'host-mute',
-                    targetId: userId,
-                    mute: !isMuted
-                }));
-            };
-            const kickBtn = document.createElement('button');
-            kickBtn.className = 'host-action-btn';
-            kickBtn.innerText = '🚫 Expulsar';
-            kickBtn.onclick = (e) => {
-                e.stopPropagation();
-                if (confirm(`¿Expulsar a ${displayName}?`)) {
+        
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+        
+        // Crear elemento de video en el grid
+        function createVideoElement(userId, displayName, isLocal = false, isHost = false, isMuted = false) {
+            const container = document.createElement('div');
+            container.className = 'video-card';
+            container.id = `video-${userId}`;
+            const video = document.createElement('video');
+            video.autoplay = true;
+            video.playsInline = true;
+            if (isLocal) video.muted = true;
+            const label = document.createElement('div');
+            label.className = 'video-label';
+            label.innerText = isLocal ? `Tú (${displayName})` : displayName;
+            container.appendChild(video);
+            container.appendChild(label);
+            if (isHost && !isLocal) {
+                const badge = document.createElement('div');
+                badge.className = 'host-badge';
+                badge.innerText = 'Anfitrión';
+                container.appendChild(badge);
+            }
+            if (isMuted && !isLocal) {
+                const badge = document.createElement('div');
+                badge.className = 'muted-badge';
+                badge.innerText = '🔇 Silenciado';
+                container.appendChild(badge);
+            }
+            // Si soy host y no es mi video, añadir botones de control
+            if (amIHost && !isLocal) {
+                const controlsDiv = document.createElement('div');
+                controlsDiv.style.position = 'absolute';
+                controlsDiv.style.bottom = '12px';
+                controlsDiv.style.right = '12px';
+                controlsDiv.style.display = 'flex';
+                controlsDiv.style.gap = '6px';
+                const muteBtn = document.createElement('button');
+                muteBtn.className = 'host-action-btn';
+                muteBtn.innerText = isMuted ? '🔊 Activar' : '🔇 Silenciar';
+                muteBtn.onclick = (e) => {
+                    e.stopPropagation();
                     socket.send(JSON.stringify({
-                        type: 'host-kick',
-                        targetId: userId
+                        type: 'host-mute',
+                        targetId: userId,
+                        mute: !isMuted
+                    }));
+                };
+                const kickBtn = document.createElement('button');
+                kickBtn.className = 'host-action-btn';
+                kickBtn.innerText = '🚫 Expulsar';
+                kickBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (confirm(`¿Expulsar a ${displayName}?`)) {
+                        socket.send(JSON.stringify({
+                            type: 'host-kick',
+                            targetId: userId
+                        }));
+                    }
+                };
+                controlsDiv.appendChild(muteBtn);
+                controlsDiv.appendChild(kickBtn);
+                container.appendChild(controlsDiv);
+            }
+            videosGrid.appendChild(container);
+            return { container, video };
+        }
+        
+        function removeVideoElement(userId) {
+            const el = document.getElementById(`video-${userId}`);
+            if (el) el.remove();
+        }
+        
+        // ----- WebRTC: Crear conexión con un peer remoto (como iniciador) -----
+        async function createPeerConnection(remoteUserId, remoteDisplay, isInitiator = true) {
+            if (peers.has(remoteUserId)) {
+                console.log(`Peer ${remoteUserId} already exists`);
+                return peers.get(remoteUserId).pc;
+            }
+            console.log(`Creating peer connection for ${remoteUserId}, initiator=${isInitiator}`);
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+            
+            // Almacenar información del peer
+            peers.set(remoteUserId, {
+                pc: pc,
+                display: remoteDisplay,
+                isHost: false,
+                muted: false,
+                videoElement: null
+            });
+            
+            // Añadir tracks locales si ya tenemos stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                    console.log(`Added local track ${track.kind} to peer ${remoteUserId}`);
+                });
+            }
+            
+            // Manejar tracks entrantes
+            pc.ontrack = (event) => {
+                console.log(`Got remote track from ${remoteUserId}, kind=${event.track.kind}`);
+                let peerInfo = peers.get(remoteUserId);
+                if (!peerInfo) return;
+                let videoElement = peerInfo.videoElement;
+                if (!videoElement) {
+                    // Crear el elemento de video si aún no existe
+                    const { video } = createVideoElement(remoteUserId, peerInfo.display, false, peerInfo.isHost, peerInfo.muted);
+                    videoElement = video;
+                    peerInfo.videoElement = videoElement;
+                }
+                if (videoElement.srcObject !== event.streams[0]) {
+                    videoElement.srcObject = event.streams[0];
+                }
+            };
+            
+            // ICE candidates
+            pc.onicecandidate = (event) => {
+                if (event.candidate && socket && socket.readyState === WebSocket.OPEN) {
+                    console.log(`Sending ICE candidate to ${remoteUserId}`);
+                    socket.send(JSON.stringify({
+                        type: 'candidate',
+                        candidate: event.candidate,
+                        target: remoteUserId
                     }));
                 }
             };
-            controlsDiv.appendChild(muteBtn);
-            controlsDiv.appendChild(kickBtn);
-            container.appendChild(controlsDiv);
-        }
-        videosGrid.appendChild(container);
-        return { container, video };
-    }
-
-    function removeVideoElement(userId) {
-        const el = document.getElementById(`video-${userId}`);
-        if (el) el.remove();
-    }
-
-    async function createPeerConnection(remoteUserId, isInitiator = true) {
-        if (peers[remoteUserId]) return peers[remoteUserId];
-        const pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-        });
-        peers[remoteUserId] = pc;
-
-        if (localStream) {
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-        }
-
-        pc.ontrack = (event) => {
-            let container = document.getElementById(`video-${remoteUserId}`);
-            let video;
-            if (!container) {
-                const info = peersInfo[remoteUserId] || { display: `Usuario ${remoteUserId.substring(0,6)}`, isHost: false, muted: false };
-                const newEl = createVideoElement(remoteUserId, info.display, false, info.isHost, info.muted);
-                container = newEl.container;
-                video = newEl.video;
-            } else {
-                video = container.querySelector('video');
-            }
-            if (video.srcObject !== event.streams[0]) {
-                video.srcObject = event.streams[0];
-            }
-        };
-
-        pc.onicecandidate = (event) => {
-            if (event.candidate && socket && socket.readyState === WebSocket.OPEN) {
+            
+            pc.oniceconnectionstatechange = () => {
+                console.log(`ICE state for ${remoteUserId}: ${pc.iceConnectionState}`);
+                if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                    // Limpiar peer
+                    if (peers.has(remoteUserId)) {
+                        peers.get(remoteUserId).pc.close();
+                        peers.delete(remoteUserId);
+                        removeVideoElement(remoteUserId);
+                        updateParticipantsCount();
+                        showToast(`Conexión perdida con ${remoteDisplay}`);
+                    }
+                }
+            };
+            
+            // Si somos iniciadores, crear y enviar oferta
+            if (isInitiator && localStream && callActive) {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
                 socket.send(JSON.stringify({
-                    type: 'candidate',
-                    candidate: event.candidate,
+                    type: 'offer',
+                    offer: offer,
                     target: remoteUserId
                 }));
-            }
-        };
-
-        pc.oniceconnectionstatechange = () => {
-            if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-                if (peers[remoteUserId]) {
-                    peers[remoteUserId].close();
-                    delete peers[remoteUserId];
-                    removeVideoElement(remoteUserId);
-                    updateParticipantsCount();
-                }
-            }
-        };
-
-        if (isInitiator && localStream && callStarted) {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            socket.send(JSON.stringify({
-                type: 'offer',
-                offer: offer,
-                target: remoteUserId
-            }));
-        }
-        updateParticipantsCount();
-        return pc;
-    }
-
-    async function handleSignalingMessage(msg) {
-        switch (msg.type) {
-            case 'existing-users':
-                myUserId = msg.senderId; // puede venir implícito, pero mejor guardarlo luego
-                amIHost = msg.isHost;
-                hostId = msg.hostId;
-                for (const user of msg.users) {
-                    peersInfo[user.userId] = { display: user.display, isHost: user.isHost, muted: user.muted };
-                    if (localStream && callStarted && !peers[user.userId]) {
-                        await createPeerConnection(user.userId, true);
-                    }
-                }
-                updateParticipantsCount();
-                break;
-            case 'user-joined':
-                peersInfo[msg.userId] = { display: msg.display, isHost: msg.isHost, muted: msg.muted };
-                if (localStream && callStarted && !peers[msg.userId]) {
-                    await createPeerConnection(msg.userId, true);
-                }
-                addChatMessage('Sistema', `${msg.display} se ha unido a la sala`, true);
-                updateParticipantsCount();
-                break;
-            case 'user-left':
-                if (peers[msg.userId]) {
-                    peers[msg.userId].close();
-                    delete peers[msg.userId];
-                    removeVideoElement(msg.userId);
-                }
-                if (peersInfo[msg.userId]) {
-                    addChatMessage('Sistema', `${peersInfo[msg.userId].display} ha salido de la sala`, true);
-                    delete peersInfo[msg.userId];
-                }
-                updateParticipantsCount();
-                break;
-            case 'host-info':
-                hostId = msg.hostId;
-                amIHost = (myUserId === hostId);
-                // Actualizar badges de host en las tarjetas
-                for (const [uid, info] of Object.entries(peersInfo)) {
-                    info.isHost = (uid === hostId);
-                    // Refrescar UI (simple: recargar las tarjetas? Mejor no, solo actualizar visualmente)
-                    const card = document.getElementById(`video-${uid}`);
-                    if (card) {
-                        let badge = card.querySelector('.host-badge');
-                        if (info.isHost && !badge) {
-                            const newBadge = document.createElement('div');
-                            newBadge.className = 'host-badge';
-                            newBadge.innerText = 'Anfitrión';
-                            card.appendChild(newBadge);
-                        } else if (!info.isHost && badge) badge.remove();
-                    }
-                }
-                if (amIHost) showToast('Ahora eres el anfitrión. Puedes silenciar o expulsar participantes.');
-                break;
-            case 'user-muted':
-                if (peersInfo[msg.userId]) {
-                    peersInfo[msg.userId].muted = msg.muted;
-                    // Actualizar badge visual en la tarjeta
-                    const card = document.getElementById(`video-${msg.userId}`);
-                    if (card) {
-                        let mutedBadge = card.querySelector('.muted-badge');
-                        if (msg.muted && !mutedBadge) {
-                            const badge = document.createElement('div');
-                            badge.className = 'muted-badge';
-                            badge.innerText = '🔇 Silenciado';
-                            card.appendChild(badge);
-                        } else if (!msg.muted && mutedBadge) mutedBadge.remove();
-                        // También actualizar texto del botón si soy host
-                        const muteBtn = card.querySelector('.host-action-btn:first-child');
-                        if (muteBtn) muteBtn.innerText = msg.muted ? '🔊 Activar' : '🔇 Silenciar';
-                    }
-                }
-                break;
-            case 'kicked':
-                showToast(msg.reason);
-                setTimeout(() => window.location.href = '/', 2000);
-                break;
-            case 'offer':
-                if (!peers[msg.senderId]) {
-                    peersInfo[msg.senderId] = { display: msg.senderName || `Usuario ${msg.senderId.substring(0,6)}`, isHost: false, muted: false };
-                    await createPeerConnection(msg.senderId, false);
-                }
-                const pcOffer = peers[msg.senderId];
-                if (pcOffer && !pcOffer.remoteDescription) {
-                    await pcOffer.setRemoteDescription(new RTCSessionDescription(msg.offer));
-                    const answer = await pcOffer.createAnswer();
-                    await pcOffer.setLocalDescription(answer);
-                    socket.send(JSON.stringify({
-                        type: 'answer',
-                        answer: answer,
-                        target: msg.senderId
-                    }));
-                }
-                break;
-            case 'answer':
-                if (peers[msg.senderId]) {
-                    await peers[msg.senderId].setRemoteDescription(new RTCSessionDescription(msg.answer));
-                }
-                break;
-            case 'candidate':
-                if (peers[msg.senderId]) {
-                    try {
-                        await peers[msg.senderId].addIceCandidate(new RTCIceCandidate(msg.candidate));
-                    } catch(e) { console.warn('ICE error', e); }
-                }
-                break;
-            case 'chat':
-                addChatMessage(msg.senderName || msg.senderDisplay, msg.message, false);
-                break;
-        }
-        if (msg.senderId && !myUserId && msg.type !== 'existing-users') {
-            // Podríamos asignar myUserId más tarde, pero normalmente llegará en existing-users
-        }
-    }
-
-    function connectWebSocket() {
-        socket = new WebSocket(WS_URL);
-        socket.onopen = () => {
-            socket.send(JSON.stringify({ name: myName, role: myRole }));
-            showToast('Conectado al servidor');
-        };
-        socket.onmessage = async (e) => {
-            const msg = JSON.parse(e.data);
-            await handleSignalingMessage(msg);
-        };
-        socket.onerror = () => showToast('Error de conexión');
-        socket.onclose = () => showToast('Desconectado del servidor');
-    }
-
-    async function startCall() {
-        if (callStarted) {
-            showToast('La llamada ya está activa');
-            return;
-        }
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            // Crear mi propio video
-            const { video } = createVideoElement('local', myDisplay, true, amIHost, false);
-            video.srcObject = localStream;
-            callStarted = true;
-
-            // Conectar con todos los peers existentes
-            for (const userId in peersInfo) {
-                if (!peers[userId]) {
-                    await createPeerConnection(userId, true);
-                }
+                console.log(`Sent offer to ${remoteUserId}`);
             }
             updateParticipantsCount();
-            showToast('Cámara y micrófono activados');
-        } catch (err) {
-            console.error(err);
-            showToast('No se pudo acceder a la cámara o micrófono');
+            return pc;
         }
-    }
-
-    function hangUp() {
-        if (localStream) {
-            localStream.getTracks().forEach(t => t.stop());
-            localStream = null;
-        }
-        for (const userId in peers) {
-            peers[userId].close();
-            delete peers[userId];
-        }
-        videosGrid.innerHTML = '';
-        callStarted = false;
-        updateParticipantsCount();
-        showToast('Llamada finalizada');
-        // No recargamos, solo paramos. El usuario puede volver a iniciar.
-    }
-
-    function toggleMic() {
-        if (localStream) {
-            const audioTrack = localStream.getAudioTracks()[0];
-            if (audioTrack) {
-                micEnabled = !micEnabled;
-                audioTrack.enabled = micEnabled;
-                document.getElementById('micBtn').style.opacity = micEnabled ? '1' : '0.5';
-                showToast(micEnabled ? 'Micrófono activado' : 'Micrófono silenciado');
+        
+        // Manejar oferta entrante
+        async function handleOffer(remoteUserId, offer, senderName) {
+            console.log(`Received offer from ${remoteUserId}`);
+            let peerInfo = peers.get(remoteUserId);
+            if (!peerInfo) {
+                // Crear peer connection en modo no-iniciador
+                await createPeerConnection(remoteUserId, senderName || `Usuario ${remoteUserId.substring(0,6)}`, false);
+                peerInfo = peers.get(remoteUserId);
+            }
+            const pc = peerInfo.pc;
+            if (pc.signalingState === 'stable') {
+                await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socket.send(JSON.stringify({
+                    type: 'answer',
+                    answer: answer,
+                    target: remoteUserId
+                }));
+                console.log(`Sent answer to ${remoteUserId}`);
+            } else {
+                console.warn(`Ignoring offer due to signaling state ${pc.signalingState}`);
             }
         }
-    }
-
-    function toggleCam() {
-        if (localStream) {
-            const videoTrack = localStream.getVideoTracks()[0];
-            if (videoTrack) {
-                camEnabled = !camEnabled;
-                videoTrack.enabled = camEnabled;
-                document.getElementById('camBtn').style.opacity = camEnabled ? '1' : '0.5';
-                showToast(camEnabled ? 'Cámara activada' : 'Cámara apagada');
+        
+        // Manejar respuesta
+        async function handleAnswer(remoteUserId, answer) {
+            console.log(`Received answer from ${remoteUserId}`);
+            const peerInfo = peers.get(remoteUserId);
+            if (peerInfo && peerInfo.pc.signalingState === 'have-local-offer') {
+                await peerInfo.pc.setRemoteDescription(new RTCSessionDescription(answer));
             }
         }
-    }
-
-    function sendChatMessage() {
-        const input = document.getElementById('chatInput');
-        const text = input.value.trim();
-        if (text === "") return;
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({
-                type: 'chat',
-                message: text
-            }));
-            input.value = '';
-        } else {
-            showToast('No conectado al servidor');
+        
+        // Manejar ICE candidate
+        async function handleCandidate(remoteUserId, candidate) {
+            console.log(`Received ICE candidate from ${remoteUserId}`);
+            const peerInfo = peers.get(remoteUserId);
+            if (peerInfo) {
+                try {
+                    await peerInfo.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (e) {
+                    console.error('Error adding ICE candidate', e);
+                }
+            }
         }
-    }
-
-    // Event listeners
-    document.getElementById('startCallBtn').addEventListener('click', startCall);
-    document.getElementById('hangupBtn').addEventListener('click', hangUp);
-    document.getElementById('micBtn').addEventListener('click', toggleMic);
-    document.getElementById('camBtn').addEventListener('click', toggleCam);
-    document.getElementById('copyBtn').addEventListener('click', () => {
-        navigator.clipboard.writeText(roomId);
-        showToast('ID de sala copiado');
-    });
-    document.getElementById('sendChatBtn').addEventListener('click', sendChatMessage);
-    document.getElementById('chatInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendChatMessage();
-    });
-    document.getElementById('roomIdDisplay').innerText = roomId;
-
-    connectWebSocket();
+        
+        // ----- Señalización WebSocket -----
+        function connectWebSocket() {
+            socket = new WebSocket(WS_URL);
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                socket.send(JSON.stringify({ name: myName, role: myRole }));
+                showToast('Conectado al servidor');
+            };
+            socket.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+                console.log('Received message:', msg.type);
+                switch (msg.type) {
+                    case 'existing-users':
+                        myUserId = msg.myUserId;
+                        amIHost = msg.isHost;
+                        hostId = msg.hostId;
+                        console.log(`My user ID: ${myUserId}, amIHost: ${amIHost}, hostId: ${hostId}`);
+                        // Para cada usuario existente, crear conexión si ya tenemos callActive
+                        for (const user of msg.users) {
+                            if (!peers.has(user.userId)) {
+                                await createPeerConnection(user.userId, user.display, true);
+                            }
+                        }
+                        break;
+                    case 'user-joined':
+                        if (callActive && localStream && !peers.has(msg.userId)) {
+                            await createPeerConnection(msg.userId, msg.display, true);
+                        }
+                        addChatMessage('Sistema', `${msg.display} se ha unido a la sala`, true);
+                        break;
+                    case 'user-left':
+                        if (peers.has(msg.userId)) {
+                            peers.get(msg.userId).pc.close();
+                            peers.delete(msg.userId);
+                            removeVideoElement(msg.userId);
+                            updateParticipantsCount();
+                            addChatMessage('Sistema', `${msg.username} ha salido de la sala`, true);
+                        }
+                        break;
+                    case 'offer':
+                        if (callActive && localStream) {
+                            await handleOffer(msg.senderId, msg.offer, msg.senderName);
+                        }
+                        break;
+                    case 'answer':
+                        await handleAnswer(msg.senderId, msg.answer);
+                        break;
+                    case 'candidate':
+                        await handleCandidate(msg.senderId, msg.candidate);
+                        break;
+                    case 'chat':
+                        addChatMessage(msg.senderName || msg.senderDisplay, msg.message, false);
+                        break;
+                    case 'host-info':
+                        hostId = msg.hostId;
+                        amIHost = (myUserId === hostId);
+                        // Actualizar badges de host en las tarjetas existentes
+                        for (const [uid, info] of peers.entries()) {
+                            const isHostNow = (uid === hostId);
+                            const card = document.getElementById(`video-${uid}`);
+                            if (card) {
+                                let badge = card.querySelector('.host-badge');
+                                if (isHostNow && !badge) {
+                                    const newBadge = document.createElement('div');
+                                    newBadge.className = 'host-badge';
+                                    newBadge.innerText = 'Anfitrión';
+                                    card.appendChild(newBadge);
+                                } else if (!isHostNow && badge) badge.remove();
+                            }
+                        }
+                        if (amIHost) showToast('Ahora eres el anfitrión');
+                        break;
+                    case 'user-muted':
+                        if (peers.has(msg.userId)) {
+                            peers.get(msg.userId).muted = msg.muted;
+                            const card = document.getElementById(`video-${msg.userId}`);
+                            if (card) {
+                                let mutedBadge = card.querySelector('.muted-badge');
+                                if (msg.muted && !mutedBadge) {
+                                    const badge = document.createElement('div');
+                                    badge.className = 'muted-badge';
+                                    badge.innerText = '🔇 Silenciado';
+                                    card.appendChild(badge);
+                                } else if (!msg.muted && mutedBadge) mutedBadge.remove();
+                                // Actualizar texto del botón si soy host
+                                const muteBtn = card.querySelector('.host-action-btn:first-child');
+                                if (muteBtn) muteBtn.innerText = msg.muted ? '🔊 Activar' : '🔇 Silenciar';
+                            }
+                        }
+                        break;
+                    case 'kicked':
+                        showToast(msg.reason);
+                        setTimeout(() => window.location.href = '/', 2000);
+                        break;
+                }
+                updateParticipantsCount();
+            };
+            socket.onerror = (err) => {
+                console.error('WebSocket error', err);
+                showToast('Error de conexión');
+            };
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+                showToast('Desconectado del servidor');
+            };
+        }
+        
+        // ----- Iniciar/Detener llamada -----
+        async function startCall() {
+            if (callActive) {
+                showToast('La llamada ya está activa');
+                return;
+            }
+            try {
+                console.log('Requesting camera/mic');
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                console.log('Got local stream');
+                // Mostrar mi video local
+                const { video } = createVideoElement('local', myDisplay, true, amIHost, false);
+                video.srcObject = localStream;
+                callActive = true;
+                
+                // Crear conexiones con todos los peers que ya existen (si los hay)
+                for (const [userId, info] of peers.entries()) {
+                    if (!info.pc) {
+                        await createPeerConnection(userId, info.display, true);
+                    } else {
+                        // Si ya existe PC, añadir tracks locales (por si acaso)
+                        localStream.getTracks().forEach(track => {
+                            if (!info.pc.getSenders().find(s => s.track === track)) {
+                                info.pc.addTrack(track, localStream);
+                                console.log(`Added local track to existing peer ${userId}`);
+                            }
+                        });
+                        // Renegociar (opcional) - no necesario si ya se añadieron tracks
+                    }
+                }
+                updateParticipantsCount();
+                showToast('Cámara y micrófono activados');
+            } catch (err) {
+                console.error('Error accessing media devices', err);
+                showToast('No se pudo acceder a la cámara o micrófono');
+            }
+        }
+        
+        function hangUp() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            for (const [userId, info] of peers.entries()) {
+                info.pc.close();
+                removeVideoElement(userId);
+            }
+            peers.clear();
+            // Eliminar mi video local
+            const localVideoCard = document.getElementById('video-local');
+            if (localVideoCard) localVideoCard.remove();
+            callActive = false;
+            updateParticipantsCount();
+            showToast('Llamada finalizada');
+        }
+        
+        function toggleMic() {
+            if (localStream) {
+                const audioTrack = localStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    micEnabled = !micEnabled;
+                    audioTrack.enabled = micEnabled;
+                    const micBtn = document.getElementById('micBtn');
+                    if (micBtn) micBtn.style.opacity = micEnabled ? '1' : '0.5';
+                    showToast(micEnabled ? 'Micrófono activado' : 'Micrófono silenciado');
+                }
+            } else {
+                showToast('Inicia la cámara primero');
+            }
+        }
+        
+        function toggleCam() {
+            if (localStream) {
+                const videoTrack = localStream.getVideoTracks()[0];
+                if (videoTrack) {
+                    camEnabled = !camEnabled;
+                    videoTrack.enabled = camEnabled;
+                    const camBtn = document.getElementById('camBtn');
+                    if (camBtn) camBtn.style.opacity = camEnabled ? '1' : '0.5';
+                    showToast(camEnabled ? 'Cámara activada' : 'Cámara apagada');
+                }
+            } else {
+                showToast('Inicia la cámara primero');
+            }
+        }
+        
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (text === "") return;
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'chat', message: text }));
+                input.value = '';
+            } else {
+                showToast('No conectado al servidor');
+            }
+        }
+        
+        // ----- Event listeners -----
+        document.getElementById('startCallBtn').addEventListener('click', startCall);
+        document.getElementById('hangupBtn').addEventListener('click', hangUp);
+        document.getElementById('micBtn').addEventListener('click', toggleMic);
+        document.getElementById('camBtn').addEventListener('click', toggleCam);
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(roomId);
+            showToast('ID de sala copiado');
+        });
+        document.getElementById('sendChatBtn').addEventListener('click', sendChatMessage);
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChatMessage();
+        });
+        document.getElementById('roomIdDisplay').innerText = roomId;
+        
+        // Iniciar conexión WebSocket
+        connectWebSocket();
+    })();
 </script>
 </body>
 </html>

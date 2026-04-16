@@ -3,60 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>VideoCall - Sala {{ROOM_ID}}</title>
+    <title>VideoCall · Sala {{ROOM_ID}}</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         body {
-            font-family: 'Segoe UI', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background: #0a0a10;
-            color: white;
+            color: #ffffff;
             height: 100vh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
-        .header {
+        .topbar {
             background: #18181f;
             padding: 12px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #2a2a35;
+            border-bottom: 0.5px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
         }
         .room-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
             font-size: 14px;
-            background: #2a2a35;
-            padding: 6px 12px;
-            border-radius: 20px;
+            background: #1c1c26;
+            padding: 6px 16px;
+            border-radius: 40px;
             font-family: monospace;
         }
         .copy-btn {
-            background: #3a3a48;
+            background: #2a2a35;
             border: none;
-            color: white;
+            color: #fff;
             padding: 6px 12px;
-            border-radius: 20px;
-            margin-left: 10px;
+            border-radius: 30px;
+            font-size: 12px;
             cursor: pointer;
+            transition: 0.2s;
+        }
+        .copy-btn:hover {
+            background: #3a3a48;
+        }
+        .participants-count {
+            background: #1c1c26;
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-size: 13px;
         }
         .videos-grid {
             flex: 1;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 16px;
             padding: 20px;
             overflow-y: auto;
             background: #0f0f13;
         }
-        .video-container {
+        .video-card {
             background: #1c1c26;
-            border-radius: 16px;
+            border-radius: 20px;
             overflow: hidden;
             position: relative;
-            aspect-ratio: 16/9;
-            border: 1px solid #2a2a35;
+            aspect-ratio: 16 / 9;
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.2s;
         }
-        .video-container video {
+        .video-card video {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -66,98 +85,122 @@
             bottom: 12px;
             left: 12px;
             background: rgba(0,0,0,0.6);
-            padding: 4px 10px;
+            backdrop-filter: blur(8px);
+            padding: 4px 12px;
             border-radius: 20px;
             font-size: 12px;
-            backdrop-filter: blur(4px);
+            font-weight: 500;
         }
-        .controls {
+        .controls-bar {
             background: #18181f;
-            padding: 16px;
+            padding: 16px 24px;
             display: flex;
             justify-content: center;
             gap: 16px;
-            border-top: 1px solid #2a2a35;
+            border-top: 0.5px solid rgba(255,255,255,0.08);
+            flex-shrink: 0;
         }
         .ctrl-btn {
             background: #2a2a35;
             border: none;
-            width: 48px;
-            height: 48px;
+            width: 52px;
+            height: 52px;
             border-radius: 50%;
             cursor: pointer;
             font-size: 20px;
-            transition: 0.2s;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .ctrl-btn.danger { background: #c23535; }
-        .ctrl-btn.primary { background: #7c6ff7; }
-        .ctrl-btn:hover { transform: scale(0.95); filter: brightness(1.1); }
-        .participants-count { font-size: 12px; background: #2a2a35; padding: 4px 10px; border-radius: 20px; }
+        .ctrl-btn.primary {
+            background: #7c6ff7;
+        }
+        .ctrl-btn.danger {
+            background: #c23535;
+        }
+        .ctrl-btn:hover {
+            transform: scale(0.96);
+            filter: brightness(1.1);
+        }
         .toast {
             position: fixed;
-            bottom: 80px;
+            bottom: 90px;
             left: 50%;
             transform: translateX(-50%);
             background: #2a2a35;
+            backdrop-filter: blur(8px);
             padding: 10px 20px;
-            border-radius: 30px;
-            animation: fadeOut 2s forwards;
-            pointer-events: none;
+            border-radius: 40px;
+            font-size: 13px;
+            animation: fadeOut 2.5s forwards;
             z-index: 1000;
+            pointer-events: none;
         }
         @keyframes fadeOut {
             0% { opacity: 1; transform: translateX(-50%) translateY(0); }
             100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
         }
-        @media (max-width: 600px) {
-            .videos-grid { grid-template-columns: 1fr; padding: 10px; }
-            .ctrl-btn { width: 40px; height: 40px; font-size: 16px; }
+        @media (max-width: 700px) {
+            .videos-grid {
+                grid-template-columns: 1fr;
+                padding: 12px;
+                gap: 12px;
+            }
+            .ctrl-btn {
+                width: 44px;
+                height: 44px;
+                font-size: 18px;
+            }
         }
     </style>
 </head>
 <body>
-<div class="header">
-    <div>
-        <span>🎥 Sala: </span>
-        <span class="room-info" id="roomIdDisplay">{{ROOM_ID}}</span>
-        <button class="copy-btn" id="copyBtn">📋 Copiar ID</button>
+<div class="topbar">
+    <div class="room-info">
+        <span>Sala</span>
+        <strong id="roomIdDisplay">{{ROOM_ID}}</strong>
+        <button class="copy-btn" id="copyBtn">Copiar ID</button>
     </div>
     <div class="participants-count" id="participantsCount">Participantes: 1</div>
 </div>
 <div class="videos-grid" id="videosGrid"></div>
-<div class="controls">
+<div class="controls-bar">
     <button class="ctrl-btn" id="micBtn">🎤</button>
     <button class="ctrl-btn" id="camBtn">📷</button>
-    <button class="ctrl-btn primary" id="startCallBtn">📞 Iniciar</button>
-    <button class="ctrl-btn danger" id="hangupBtn">❌ Colgar</button>
+    <button class="ctrl-btn primary" id="startCallBtn">📞</button>
+    <button class="ctrl-btn danger" id="hangupBtn">❌</button>
 </div>
 
 <script>
     const roomId = '{{ROOM_ID}}';
     const WS_URL = `wss://${window.location.host}/ws/${roomId}`;
-    let socket, localStream;
-    let peers = {};  // userId -> RTCPeerConnection
-    let micEnabled = true, camEnabled = true, callActive = false;
+    let socket = null;
+    let localStream = null;
+    let peers = {};       // userId -> RTCPeerConnection
+    let callStarted = false;
+    let micEnabled = true;
+    let camEnabled = true;
+
     const videosGrid = document.getElementById('videosGrid');
-    const participantsCountSpan = document.getElementById('participantsCount');
-    let localVideoElement = null;
+    const participantsSpan = document.getElementById('participantsCount');
 
     function showToast(msg) {
         const toast = document.createElement('div');
         toast.className = 'toast';
         toast.innerText = msg;
         document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2000);
+        setTimeout(() => toast.remove(), 2500);
     }
 
     function updateParticipantsCount() {
         const count = Object.keys(peers).length + (localStream ? 1 : 0);
-        participantsCountSpan.innerText = `Participantes: ${count}`;
+        participantsSpan.innerText = `Participantes: ${count}`;
     }
 
     function createVideoElement(userId, isLocal = false) {
         const container = document.createElement('div');
-        container.className = 'video-container';
+        container.className = 'video-card';
         container.id = `video-${userId}`;
         const video = document.createElement('video');
         video.autoplay = true;
@@ -179,7 +222,9 @@
 
     async function createPeerConnection(remoteUserId, isInitiator = true) {
         if (peers[remoteUserId]) return peers[remoteUserId];
-        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
         peers[remoteUserId] = pc;
 
         if (localStream) {
@@ -202,7 +247,7 @@
         };
 
         pc.onicecandidate = (event) => {
-            if (event.candidate) {
+            if (event.candidate && socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({
                     type: 'candidate',
                     candidate: event.candidate,
@@ -223,7 +268,7 @@
             }
         };
 
-        if (isInitiator && localStream && callActive) {
+        if (isInitiator && localStream && callStarted) {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             socket.send(JSON.stringify({
@@ -240,13 +285,13 @@
         switch (msg.type) {
             case 'existing-users':
                 for (const userId of msg.users) {
-                    if (!peers[userId] && localStream && callActive) {
+                    if (!peers[userId] && localStream && callStarted) {
                         await createPeerConnection(userId, true);
                     }
                 }
                 break;
             case 'user-joined':
-                if (localStream && callActive && !peers[msg.userId]) {
+                if (localStream && callStarted && !peers[msg.userId]) {
                     await createPeerConnection(msg.userId, true);
                 }
                 break;
@@ -262,11 +307,11 @@
                 if (!peers[msg.sender]) {
                     await createPeerConnection(msg.sender, false);
                 }
-                const pc = peers[msg.sender];
-                if (pc && !pc.remoteDescription) {
-                    await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
+                const pcOffer = peers[msg.sender];
+                if (pcOffer && !pcOffer.remoteDescription) {
+                    await pcOffer.setRemoteDescription(new RTCSessionDescription(msg.offer));
+                    const answer = await pcOffer.createAnswer();
+                    await pcOffer.setLocalDescription(answer);
                     socket.send(JSON.stringify({
                         type: 'answer',
                         answer: answer,
@@ -275,15 +320,15 @@
                 }
                 break;
             case 'answer':
-                if (peers[msg.target]) {
-                    await peers[msg.target].setRemoteDescription(new RTCSessionDescription(msg.answer));
+                if (peers[msg.sender]) {
+                    await peers[msg.sender].setRemoteDescription(new RTCSessionDescription(msg.answer));
                 }
                 break;
             case 'candidate':
                 if (peers[msg.sender]) {
                     try {
                         await peers[msg.sender].addIceCandidate(new RTCIceCandidate(msg.candidate));
-                    } catch(e) { console.error('ICE error', e); }
+                    } catch(e) { console.warn('ICE falló', e); }
                 }
                 break;
         }
@@ -292,27 +337,38 @@
     function connectWebSocket() {
         socket = new WebSocket(WS_URL);
         socket.onopen = () => showToast('Conectado al servidor');
-        socket.onmessage = async (e) => await handleSignalingMessage(JSON.parse(e.data));
+        socket.onmessage = async (e) => {
+            const msg = JSON.parse(e.data);
+            await handleSignalingMessage(msg);
+        };
         socket.onerror = () => showToast('Error de conexión');
         socket.onclose = () => showToast('Desconectado del servidor');
     }
 
     async function startCall() {
+        if (callStarted) {
+            showToast('La llamada ya está activa');
+            return;
+        }
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            const { container, video } = createVideoElement('local', true);
-            localVideoElement = video;
+            const { video } = createVideoElement('local', true);
             video.srcObject = localStream;
-            callActive = true;
-            // Crear conexiones con usuarios ya existentes (si los hay)
-            // Los mensajes 'existing-users' ya se recibieron antes? Puede que sí. Pero si no, esperamos.
-            // Como el WebSocket ya está abierto, los mensajes 'existing-users' ya fueron procesados.
-            // Si no había nadie al inicio, no hay problema.
-            showToast('Cámara activa. Esperando otros participantes...');
+            callStarted = true;
+
+            // Crear conexiones con usuarios que ya estén en la sala
+            // (los mensajes 'existing-users' pueden haber llegado antes o después)
+            // Si ya hay peers definidos (por mensajes previos), los usamos.
+            for (const userId in peers) {
+                if (!peers[userId].localDescription && localStream) {
+                    await createPeerConnection(userId, true);
+                }
+            }
             updateParticipantsCount();
-        } catch(err) {
-            showToast('No se pudo acceder a cámara/micrófono');
+            showToast('Cámara y micrófono activados');
+        } catch (err) {
             console.error(err);
+            showToast('No se pudo acceder a la cámara o micrófono');
         }
     }
 
@@ -325,19 +381,19 @@
             peers[userId].close();
             delete peers[userId];
         }
-        document.querySelectorAll('.video-container').forEach(v => v.remove());
-        callActive = false;
-        localVideoElement = null;
+        // Eliminar todos los videos
+        videosGrid.innerHTML = '';
+        callStarted = false;
         updateParticipantsCount();
         showToast('Llamada finalizada');
     }
 
     function toggleMic() {
         if (localStream) {
-            const track = localStream.getAudioTracks()[0];
-            if (track) {
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
                 micEnabled = !micEnabled;
-                track.enabled = micEnabled;
+                audioTrack.enabled = micEnabled;
                 document.getElementById('micBtn').style.opacity = micEnabled ? '1' : '0.5';
                 showToast(micEnabled ? 'Micrófono activado' : 'Micrófono silenciado');
             }
@@ -346,10 +402,10 @@
 
     function toggleCam() {
         if (localStream) {
-            const track = localStream.getVideoTracks()[0];
-            if (track) {
+            const videoTrack = localStream.getVideoTracks()[0];
+            if (videoTrack) {
                 camEnabled = !camEnabled;
-                track.enabled = camEnabled;
+                videoTrack.enabled = camEnabled;
                 document.getElementById('camBtn').style.opacity = camEnabled ? '1' : '0.5';
                 showToast(camEnabled ? 'Cámara activada' : 'Cámara apagada');
             }
@@ -363,7 +419,7 @@
     document.getElementById('camBtn').addEventListener('click', toggleCam);
     document.getElementById('copyBtn').addEventListener('click', () => {
         navigator.clipboard.writeText(roomId);
-        showToast('ID copiado: ' + roomId);
+        showToast('ID de sala copiado');
     });
     document.getElementById('roomIdDisplay').innerText = roomId;
 

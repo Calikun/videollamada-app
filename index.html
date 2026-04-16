@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VideoCall · Sala de reuniones</title>
+    <title>VideoCall · Sala de reuniones profesional</title>
     <style>
         * {
             margin: 0;
@@ -119,52 +119,55 @@
     <h1>VideoCall</h1>
     <div class="subtitle">Reuniones profesionales en la nube</div>
     <div class="input-group">
-        <label>Tu nombre</label>
-        <input type="text" id="usernameInput" placeholder="Ej: Ana García" maxlength="30">
+        <label>Nombre completo</label>
+        <input type="text" id="nameInput" placeholder="Ej: Ana García" maxlength="40">
     </div>
     <div class="input-group">
-        <label>ID de sala</label>
-        <input type="text" id="roomIdInput" placeholder="Ej: proyecto-x">
+        <label>Cargo / Rol</label>
+        <input type="text" id="roleInput" placeholder="Ej: Directora de Proyectos" maxlength="40">
     </div>
-    <button id="joinBtn">Unirse a sala</button>
-    <div class="divider">o</div>
-    <button id="createBtn" class="secondary">Crear nueva sala</button>
-    <div class="info-text">Las salas son temporales. Comparte el ID con tus participantes.</div>
+    <div class="input-group">
+        <label>ID de sala (opcional)</label>
+        <input type="text" id="roomIdInput" placeholder="Dejar vacío para crear nueva">
+    </div>
+    <button id="joinBtn">Unirse o crear sala</button>
+    <div class="info-text">El primer participante será el anfitrión con control sobre la reunión.</div>
 </div>
 <script>
     const joinBtn = document.getElementById('joinBtn');
-    const createBtn = document.getElementById('createBtn');
     const roomInput = document.getElementById('roomIdInput');
-    const usernameInput = document.getElementById('usernameInput');
+    const nameInput = document.getElementById('nameInput');
+    const roleInput = document.getElementById('roleInput');
 
-    function getUsername() {
-        let name = usernameInput.value.trim();
-        if (name === "") return "Anónimo";
-        return name.substring(0, 30);
+    function getIdentity() {
+        let name = nameInput.value.trim();
+        let role = roleInput.value.trim();
+        if (name === "") name = "Anónimo";
+        return { name, role };
     }
 
-    function joinRoom(roomId) {
-        if (!roomId.trim()) {
-            alert('Por favor ingresa un ID de sala');
-            return;
+    function joinOrCreate() {
+        let roomId = roomInput.value.trim();
+        if (roomId === "") {
+            // Crear nueva sala con ID aleatorio
+            roomId = Math.random().toString(36).substring(2, 10);
         }
-        const username = encodeURIComponent(getUsername());
-        window.location.href = `/room/${encodeURIComponent(roomId)}?name=${username}`;
+        const { name, role } = getIdentity();
+        const params = new URLSearchParams();
+        params.set('name', name);
+        params.set('role', role);
+        window.location.href = `/room/${encodeURIComponent(roomId)}?${params.toString()}`;
     }
 
-    function createRoom() {
-        const newId = Math.random().toString(36).substring(2, 10);
-        const username = encodeURIComponent(getUsername());
-        window.location.href = `/room/${newId}?name=${username}`;
-    }
-
-    joinBtn.addEventListener('click', () => joinRoom(roomInput.value));
-    createBtn.addEventListener('click', createRoom);
+    joinBtn.addEventListener('click', joinOrCreate);
     roomInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinRoom(roomInput.value);
+        if (e.key === 'Enter') joinOrCreate();
     });
-    usernameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') joinRoom(roomInput.value);
+    nameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') joinOrCreate();
+    });
+    roleInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') joinOrCreate();
     });
 </script>
 </body>

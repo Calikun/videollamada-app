@@ -6,7 +6,7 @@ import uuid
 
 app = FastAPI()
 
-# Estructura: room_id -> { "websockets": {ws: user_id}, "user_ids": set() }
+# Estructura: room_id -> {"websockets": {ws: user_id}, "user_ids": set()}
 rooms: Dict[str, Dict] = {}
 
 @app.get("/")
@@ -24,7 +24,7 @@ async def get_room(room_id: str):
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
-    user_id = uuid.uuid4().hex  # ID único para este usuario
+    user_id = uuid.uuid4().hex[:8]  # ID más corto
 
     # Crear sala si no existe
     if room_id not in rooms:
@@ -34,14 +34,14 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
     room["websockets"][websocket] = user_id
     room["user_ids"].add(user_id)
 
-    # Enviar al nuevo usuario la lista de usuarios ya conectados (excluyéndose a sí mismo)
+    # Enviar al nuevo usuario la lista de usuarios ya conectados
     other_users = [uid for uid in room["user_ids"] if uid != user_id]
     await websocket.send_text(json.dumps({
         "type": "existing-users",
         "users": other_users
     }))
 
-    # Notificar a los demás usuarios que alguien se ha unido
+    # Notificar a los demás que alguien se unió
     for client in room["websockets"]:
         if client != websocket:
             await client.send_text(json.dumps({
@@ -53,21 +53,24 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
-            # Reenviar el mensaje a todos los demás participantes
-            for client in room["websockets"]:
+            # Reenviar mensaje a todos los demás (o a un target específico)
+            target = message.get("target")
+            for client, uid in room["websockets"].items():
                 if client != websocket:
-                    await client.send_text(json.dumps(message))
+                    if target is None or uid == target:
+                        # Añadir el sender para que el frontend sepa quién envía
+                        message["sender"] = user_id
+                        await client.send_text(json.dumps(message))
     except WebSocketDisconnect:
-        # Limpiar al usuario desconectado
+        # Limpiar
         if websocket in room["websockets"]:
             del room["websockets"][websocket]
         room["user_ids"].discard(user_id)
-        # Notificar a los demás que este usuario se fue
+        # Notificar salida
         for client in room["websockets"]:
             await client.send_text(json.dumps({
                 "type": "user-left",
                 "userId": user_id
             }))
-        # Si la sala queda vacía, eliminarla
         if len(room["websockets"]) == 0:
             del rooms[room_id]

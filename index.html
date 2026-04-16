@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VideoCall · Sala de reunión</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #fff;
+    }
+
+    .meet-wrapper {
+      background: #0f0f13;
+      width: 100%;
+      max-width: 960px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: #18181f;
+      border-bottom: 0.5px solid rgba(255,255,255,0.08);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-dot {
+      width: 10px;
+      height: 10px;
+      background: #7c6ff7;
+      border-radius: 50%;
+    }
+
+    .topbar-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.9);
+      letter-spacing: 0.01em;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(124,111,247,0.15);
+      border: 0.5px solid rgba(124,111,247,0.3);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: #a99ef7;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background: #7c6ff7;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .time-badge {
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.05em;
+      padding: 4px 10px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 6px;
+      min-width: 56px;
+      text-align: center;
+    }
+
+    /* ── Video grid ── */
+    .videos-area {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 14px;
+    }
+
+    .video-card {
+      background: #1c1c26;
+      border-radius: 12px;
+      border: 0.5px solid rgba(255,255,255,0.08);
+      position: relative;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .video-card video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .avatar-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .avatar-circle {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .avatar-local {
+      background: rgba(124,111,247,0.18);
+      border: 1.5px solid rgba(124,111,247,0.45);
+      color: #a99ef7;
+    }
+
+    .avatar-remote {
+      background: rgba(29,158,117,0.18);
+      border: 1.5px solid rgba(29,158,117,0.45);
+      color: #5dcaa5;
+    }
+
+    .avatar-label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.35);
+    }
+
+    .video-label {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0,0,0,0.55);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.85);
+      backdrop-filter: blur(4px);
+    }
+
+    .mic-dot {
+      width: 7px;
+      height: 7px;
+      background: #5dcaa5;
+      border-radius: 50%;
+      transition: background 0.2s;
+    }
+
+    .mic-dot.muted { background: #e24b4a; }
+
+    .signal-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(0,0,0,0.45);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.45);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .signal-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    .bar {
+      width: 3px;
+      background: #5dcaa5;
+      border-radius: 1px;
+    }
+
+    /* ── Controls bar ── */
+    .controls-bar {
+      background: #18181f;
+      border-top: 0.5px solid rgba(255,255,255,0.08);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .ctrl-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .ctrl-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 0.5px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .ctrl-icon:hover { background: rgba(255,255,255,0.12); }
+
+    .ctrl-icon svg { width: 20px; height: 20px; }
+
+    .ctrl-icon.danger {
+      background: rgba(163,45,45,0.8);
+      border-color: #e24b4a;
+    }
+
+    .ctrl-icon.danger:hover { background: #c23535; }
+
+    .ctrl-icon.primary {
+      background: rgba(124,111,247,0.18);
+      border-color: rgba(124,111,247,0.4);
+    }
+
+    .ctrl-icon.primary:hover { background: rgba(124,111,247,0.3); }
+
+    .ctrl-icon.active-muted {
+      background: rgba(226,75,74,0.18);
+      border-color: rgba(226,75,74,0.5);
+    }
+
+    .ctrl-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.4);
+      white-space: nowrap;
+    }
+
+    .divider-v {
+      width: 0.5px;
+      height: 40px;
+      background: rgba(255,255,255,0.1);
+      margin: 0 4px;
+    }
+
+    /* ── Toast notification ── */
+    .toast {
+      position: fixed;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30,30,42,0.97);
+      border: 0.5px solid rgba(255,255,255,0.14);
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.82);
+      z-index: 200;
+      white-space: nowrap;
+      animation: fadeInOut 3.5s forwards;
+    }
+
+    @keyframes fadeInOut {
+      0%   { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+      10%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+      80%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="meet-wrapper">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo-dot"></div>
+      <span class="topbar-title">Sala de reunión · ABC-XYZ-123</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill">
+        <div class="status-dot"></div>
+        En llamada
+      </div>
+      <span class="time-badge" id="timer">00:00</span>
+    </div>
+  </div>
+
+  <!-- Video grid -->
+  <div class="videos-area">
+
+    <!-- Local -->
+    <div class="video-card">
+      <div class="avatar-placeholder" id="local-placeholder">
+        <div class="avatar-circle avatar-local">TÚ</div>
+        <span class="avatar-label">Cámara apagada</span>
+      </div>
+      <video id="localVideo" autoplay playsinline muted style="display:none"></video>
+      <div class="video-label">
+        <div class="mic-dot" id="local-mic-dot"></div>
+        Tú (local)
+      </div>
+      <div class="signal-badge">
+        <div class="signal-bars">
+          <div class="bar" style="height:4px"></div>
+          <div class="bar" style="height:7px"></div>
+          <div class="bar" style="height:11px"></div>
+        </div>
+        HD
+      </div>
+    </div>
+
+    <!-- Remote -->
+    <div class="video-card">
+      <div class="avatar-placeholder" id="remote-placeholder">
+        <div class="avatar-circle avatar-remote">RV</div>
+        <span class="avatar-label">Esperando conexión...</span>
+      </div>
+      <video id="remoteVideo" autoplay playsinline style="display:none"></video>
+      <div class="video-label">
+        <div class="mic-dot" id="remote-mic-dot"></div>
+        Remoto
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-bar">
+
+    <!-- Mic -->
+    <button class="ctrl-btn" onclick="toggleMic()" title="Micrófono">
+      <div class="ctrl-icon" id="mic-btn">
+        <svg id="mic-svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <!-- mic on -->
+          <g id="mic-on-shape">
+            <rect x="9" y="2" width="6" height="12" rx="3"/>
+            <path d="M5 10a7 7 0 0014 0M12 19v3M9 22h6"/>
+          </g>
+          <!-- mic off (tachado) -->
+          <g id="mic-off-shape" display="none">
+            <rect x="9" y="2" width="6" height="12" rx="3" stroke="rgba(255,255,255,0.4)"/>
+            <path d="M5 10a7 7 0 0014 0M12 19v3M9 22h6" stroke="rgba(255,255,255,0.4)"/>
+            <line x1="3" y1="3" x2="23" y2="23" stroke="#e24b4a" stroke-width="2"/>
+            <line x1="23" y1="3" x2="3" y2="23" stroke="#e24b4a" stroke-width="2"/>
+          </g>
+        </svg>
+      </div>
+      <span class="ctrl-label" id="mic-label">Silenciar</span>
+    </button>
+
+    <!-- Camera -->
+    <button class="ctrl-btn" onclick="toggleCamera()" title="Cámara">
+      <div class="ctrl-icon" id="cam-btn">
+        <svg id="cam-svg" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <!-- cam on -->
+          <g id="cam-on-shape">
+            <path d="M23 7l-7 5 7 5V7z"/>
+            <rect x="1" y="5" width="15" height="14" rx="2"/>
+          </g>
+          <!-- cam off (tachado) -->
+          <g id="cam-off-shape" display="none">
+            <path d="M23 7l-7 5 7 5V7z" stroke="rgba(255,255,255,0.4)"/>
+            <rect x="1" y="5" width="15" height="14" rx="2" stroke="rgba(255,255,255,0.4)"/>
+            <line x1="0" y1="3" x2="20" y2="23" stroke="#e24b4a" stroke-width="2"/>
+            <line x1="20" y1="3" x2="0" y2="23" stroke="#e24b4a" stroke-width="2"/>
+          </g>
+        </svg>
+      </div>
+      <span class="ctrl-label" id="cam-label">Cámara</span>
+    </button>
+
+    <div class="divider-v"></div>
+
+    <!-- Start -->
+    <button class="ctrl-btn" onclick="startCall()" title="Iniciar cámara">
+      <div class="ctrl-icon primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#a99ef7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.09 9.94a19.79 19.79 0 01-3.07-8.7A2 2 0 012 1.22h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 9.09a16 16 0 006.29 6.29l1.14-1.14a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+        </svg>
+      </div>
+      <span class="ctrl-label">Iniciar</span>
+    </button>
+
+    <!-- Call -->
+    <button class="ctrl-btn" onclick="makeCall()" title="Llamar">
+      <div class="ctrl-icon primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#a99ef7" stroke-width="1.8" stroke-linecap="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polygon points="10 8 16 12 10 16 10 8" fill="#a99ef7" stroke="none"/>
+        </svg>
+      </div>
+      <span class="ctrl-label">Llamar</span>
+    </button>
+
+    <div class="divider-v"></div>
+
+    <!-- Hang up -->
+    <button class="ctrl-btn" onclick="hangUp()" title="Colgar">
+      <div class="ctrl-icon danger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.42 19.42 0 01-3.33-2.67m-2.67-3.34a19.79 19.79 0 01-3.07-8.63A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91"/>
+          <line x1="23" y1="1" x2="1" y2="23" stroke="#e24b4a" stroke-width="2"/>
+        </svg>
+      </div>
+      <span class="ctrl-label">Colgar</span>
+    </button>
+
+  </div>
+</div>
+
+<script>
+  const WS_URL = `ws://${window.location.host}/ws/test`;
+
+  let socket, pc, localStream;
+  let micOn = true, camOn = true;
+  let timerInterval, seconds = 0;
+
+  // ── WebSocket ──
+  function connectSocket() {
+    socket = new WebSocket(WS_URL);
+
+    socket.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === "hangup") {
+        toast("El otro usuario colgó la llamada");
+        if (pc) { pc.close(); pc = null; }
+        showVideo("remoteVideo", false);
+        stopTimer();
+      }
+
+      if (data.type === "offer" && pc) {
+        await pc.setRemoteDescription(data);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.send(JSON.stringify(answer));
+        startTimer();
+      }
+
+      if (data.type === "answer" && pc) {
+        await pc.setRemoteDescription(data);
+      }
+
+      if (data.type === "candidate" && pc) {
+        try { await pc.addIceCandidate(data.candidate); } catch (e) {}
+      }
+    };
+
+    socket.onerror = () => toast("Error de conexión con el servidor");
+  }
+
+  // ── Helpers ──
+  function showVideo(id, show) {
+    const vid = document.getElementById(id);
+    const phId = id === "localVideo" ? "local-placeholder" : "remote-placeholder";
+    const ph = document.getElementById(phId);
+    vid.style.display = show ? "block" : "none";
+    ph.style.display  = show ? "none"  : "flex";
+  }
+
+  function toast(msg) {
+    const old = document.querySelector(".toast");
+    if (old) old.remove();
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3600);
+  }
+
+  function startTimer() {
+    if (timerInterval) return;
+    seconds = 0;
+    timerInterval = setInterval(() => {
+      seconds++;
+      const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+      const s = String(seconds % 60).padStart(2, "0");
+      document.getElementById("timer").textContent = m + ":" + s;
+    }, 1000);
+  }
+
+  function stopTimer() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    document.getElementById("timer").textContent = "00:00";
+  }
+
+  // ── Actions ──
+  async function startCall() {
+    try {
+      if (!socket || socket.readyState !== WebSocket.OPEN) connectSocket();
+
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      document.getElementById("localVideo").srcObject = localStream;
+      showVideo("localVideo", true);
+
+      pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+      pc.ontrack = (e) => {
+        document.getElementById("remoteVideo").srcObject = e.streams[0];
+        showVideo("remoteVideo", true);
+        startTimer();
+      };
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) socket.send(JSON.stringify({ type: "candidate", candidate: e.candidate }));
+      };
+
+      toast("Cámara lista — pulsa Llamar para conectar");
+    } catch (e) {
+      toast("No se pudo acceder a la cámara/micrófono");
+    }
+  }
+
+  async function makeCall() {
+    if (!pc) { toast("Primero pulsa Iniciar"); return; }
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.send(JSON.stringify(offer));
+  }
+
+  function hangUp() {
+    if (pc) { pc.close(); pc = null; }
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    showVideo("localVideo", false);
+    showVideo("remoteVideo", false);
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "hangup" }));
+    }
+    stopTimer();
+    toast("Llamada finalizada");
+  }
+
+  function toggleMic() {
+    if (!localStream) { toast("Primero inicia la cámara"); return; }
+    micOn = !micOn;
+    localStream.getAudioTracks().forEach(t => t.enabled = micOn);
+    const btn = document.getElementById("mic-btn");
+    const dot = document.getElementById("local-mic-dot");
+    const lbl = document.getElementById("mic-label");
+    btn.classList.toggle("active-muted", !micOn);
+    dot.classList.toggle("muted", !micOn);
+    lbl.textContent = micOn ? "Silenciar" : "Activar mic";
+    document.getElementById("mic-on-shape").setAttribute("display", micOn ? "" : "none");
+    document.getElementById("mic-off-shape").setAttribute("display", micOn ? "none" : "");
+  }
+
+  function toggleCamera() {
+    if (!localStream) { toast("Primero inicia la cámara"); return; }
+    camOn = !camOn;
+    localStream.getVideoTracks().forEach(t => t.enabled = camOn);
+    const btn = document.getElementById("cam-btn");
+    const lbl = document.getElementById("cam-label");
+    btn.classList.toggle("active-muted", !camOn);
+    lbl.textContent = camOn ? "Cámara" : "Sin video";
+    showVideo("localVideo", camOn);
+    document.getElementById("cam-on-shape").setAttribute("display", camOn ? "" : "none");
+    document.getElementById("cam-off-shape").setAttribute("display", camOn ? "none" : "");
+  }
+</script>
+</body>
+</html>

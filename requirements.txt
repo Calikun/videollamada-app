@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-websockets
-prometheus-client
-python-jose[cryptography]
-passlib[bcrypt]
-python-multipart
-psutil

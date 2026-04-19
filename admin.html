@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ensigna.corp — Panel Administrativo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;min-height:100vh}
+    .sidebar{width:240px;background:#1e293b;border-right:1px solid #334155;padding:24px 0;flex-shrink:0;display:flex;flex-direction:column}
+    .sidebar .brand{padding:0 20px;display:flex;align-items:center;gap:10px;margin-bottom:32px}
+    .sidebar .brand img{width:32px;height:32px;border-radius:8px}
+    .sidebar .brand span{font-size:1rem;font-weight:700;color:#f1f5f9}
+    .sidebar nav a{display:flex;align-items:center;gap:10px;padding:10px 20px;color:#94a3b8;font-size:.85rem;font-weight:500;text-decoration:none;transition:all .15s;border-left:3px solid transparent}
+    .sidebar nav a:hover,.sidebar nav a.active{color:#f1f5f9;background:rgba(59,130,246,.08);border-left-color:#3b82f6}
+    .sidebar nav a svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
+    .sidebar .spacer{flex:1}
+    .sidebar .logout{padding:0 20px}
+    .sidebar .logout button{width:100%;padding:10px;background:transparent;border:1px solid #334155;border-radius:8px;color:#94a3b8;font-size:.8rem;cursor:pointer;font-family:inherit;transition:all .15s}
+    .sidebar .logout button:hover{border-color:#ef4444;color:#ef4444}
+    .main{flex:1;padding:32px;overflow-y:auto}
+    .main h2{font-size:1.4rem;font-weight:700;color:#f1f5f9;margin-bottom:24px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:32px}
+    .kpi{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px}
+    .kpi .label{font-size:.75rem;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+    .kpi .value{font-size:1.8rem;font-weight:700;color:#f1f5f9}
+    .kpi .unit{font-size:.8rem;color:#64748b;margin-left:4px}
+    .section{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;margin-bottom:24px}
+    .section h3{font-size:1rem;font-weight:600;color:#f1f5f9;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+    .section h3 .dot{width:8px;height:8px;border-radius:50%;background:#22c55e}
+    table{width:100%;border-collapse:collapse}
+    th{text-align:left;font-size:.7rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;border-bottom:1px solid #334155}
+    td{padding:10px 12px;font-size:.85rem;border-bottom:1px solid rgba(51,65,85,.5)}
+    .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:.7rem;font-weight:600}
+    .badge.high{background:rgba(34,197,94,.15);color:#22c55e}
+    .badge.medium{background:rgba(234,179,8,.15);color:#eab308}
+    .badge.low{background:rgba(239,68,68,.15);color:#ef4444}
+    .badge.host{background:rgba(59,130,246,.15);color:#3b82f6}
+    .priority-slider{width:80px;accent-color:#3b82f6}
+    .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .chart-box{position:relative;height:160px}
+    .chart-box canvas{width:100%!important;height:100%!important}
+    .chart-label{font-size:.7rem;color:#64748b;text-align:center;margin-top:4px}
+    .empty{color:#475569;font-size:.85rem;text-align:center;padding:32px}
+    @media(max-width:768px){
+      .sidebar{width:60px;padding:16px 0}
+      .sidebar .brand span,.sidebar nav a span,.sidebar .logout{display:none}
+      .sidebar nav a{justify-content:center;padding:12px 0;border-left:none;border-bottom:3px solid transparent}
+      .sidebar nav a.active{border-bottom-color:#3b82f6}
+      .main{padding:16px}
+      .chart-row{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="brand"><img src="/static/logo.png" alt=""><span>Ensigna.corp</span></div>
+    <nav>
+      <a href="#" class="active" data-tab="overview">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Resumen</span>
+      </a>
+      <a href="#" data-tab="rooms">
+        <svg viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+        <span>Salas</span>
+      </a>
+      <a href="#" data-tab="metrics">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Metricas</span>
+      </a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="logout"><button id="logoutBtn">Cerrar sesion</button></div>
+  </div>
+  <div class="main" id="mainContent"></div>
+
+  <script>
+    const mainEl = document.getElementById('mainContent');
+    let currentTab = 'overview';
+    let systemData = {};
+    let roomsData = [];
+
+    // Nav
+    document.querySelectorAll('[data-tab]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        document.querySelectorAll('[data-tab]').forEach(x => x.classList.remove('active'));
+        a.classList.add('active');
+        currentTab = a.dataset.tab;
+        render();
+      });
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/api/logout', {method:'POST'});
+      window.location.href = '/login';
+    });
+
+    function fmtUptime(s) {
+      const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    function qosBadge(qos) {
+      return `<span class="badge ${qos}">${qos.toUpperCase()}</span>`;
+    }
+
+    function render() {
+      if (currentTab === 'overview') renderOverview();
+      else if (currentTab === 'rooms') renderRooms();
+      else if (currentTab === 'metrics') renderMetrics();
+    }
+
+    function renderOverview() {
+      const s = systemData;
+      mainEl.innerHTML = `
+        <h2>Panel de Control</h2>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="label">Salas activas</div><div class="value">${s.activeRooms||0}</div></div>
+          <div class="kpi"><div class="label">Participantes</div><div class="value">${s.activeParticipants||0}</div></div>
+          <div class="kpi"><div class="label">Conexiones WS</div><div class="value">${s.activeWebsockets||0}</div></div>
+          <div class="kpi"><div class="label">Uptime</div><div class="value">${fmtUptime(s.uptime||0)}</div></div>
+          <div class="kpi"><div class="label">CPU</div><div class="value">${(s.cpu||0).toFixed(1)}<span class="unit">%</span></div></div>
+          <div class="kpi"><div class="label">Memoria</div><div class="value">${(s.memory||0).toFixed(1)}<span class="unit">%</span></div></div>
+          <div class="kpi"><div class="label">Salas creadas (total)</div><div class="value">${s.totalRoomsCreated||0}</div></div>
+          <div class="kpi"><div class="label">Mensajes (total)</div><div class="value">${s.totalMessages||0}</div></div>
+        </div>
+        <div class="section">
+          <h3><span class="dot"></span> Salas en vivo</h3>
+          ${roomsData.length === 0 ? '<div class="empty">No hay salas activas</div>' :
+            `<table><thead><tr><th>Sala</th><th>Participantes</th><th>Prioridad</th><th>QoS</th></tr></thead><tbody>
+            ${roomsData.map(r => `<tr><td style="font-family:monospace;font-size:.8rem">${r.roomId}</td><td>${r.participants}</td><td>${r.priority}</td><td>${qosBadge(r.qos.qos)}</td></tr>`).join('')}
+            </tbody></table>`}
+        </div>`;
+    }
+
+    function renderRooms() {
+      mainEl.innerHTML = `<h2>Salas Activas</h2>`;
+      if (roomsData.length === 0) {
+        mainEl.innerHTML += '<div class="section"><div class="empty">No hay salas activas en este momento</div></div>';
+        return;
+      }
+      roomsData.forEach(r => {
+        const usersRows = r.users.map(u => `
+          <tr>
+            <td>${u.display}${u.isHost ? ' <span class="badge host">HOST</span>' : ''}</td>
+            <td>${u.role || '—'}</td>
+            <td>${u.priority}</td>
+            <td>${u.muted ? 'Si' : 'No'}</td>
+          </tr>`).join('');
+        mainEl.innerHTML += `
+          <div class="section">
+            <h3><span class="dot"></span> Sala: <span style="font-family:monospace;margin-left:4px">${r.roomId}</span></h3>
+            <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+              <div><span style="color:#64748b;font-size:.75rem">Prioridad QoS:</span> <strong>${r.priority}</strong> ${qosBadge(r.qos.qos)}</div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="color:#64748b;font-size:.75rem">Ajustar:</span>
+                <input type="range" class="priority-slider" min="0" max="100" value="${r.priority}" data-room="${r.roomId}">
+                <button class="badge high" style="cursor:pointer;border:none" onclick="setQoS('${r.roomId}', this.previousElementSibling.value)">Aplicar</button>
+              </div>
+            </div>
+            <table><thead><tr><th>Participante</th><th>Rol</th><th>Prioridad</th><th>Silenciado</th></tr></thead>
+            <tbody>${usersRows}</tbody></table>
+          </div>`;
+      });
+    }
+
+    function renderMetrics() {
+      const s = systemData;
+      mainEl.innerHTML = `
+        <h2>Metricas del Sistema</h2>
+        <div class="chart-row">
+          <div class="section">
+            <h3>CPU</h3>
+            <div class="chart-box"><canvas id="cpuChart"></canvas></div>
+          </div>
+          <div class="section">
+            <h3>Memoria RAM</h3>
+            <div class="chart-box"><canvas id="memChart"></canvas></div>
+          </div>
+        </div>
+        <div class="section" style="margin-top:16px">
+          <h3>Estadisticas</h3>
+          <table>
+            <tr><td>Salas creadas (historico)</td><td><strong>${s.totalRoomsCreated||0}</strong></td></tr>
+            <tr><td>Mensajes de chat (historico)</td><td><strong>${s.totalMessages||0}</strong></td></tr>
+            <tr><td>Salas activas ahora</td><td><strong>${s.activeRooms||0}</strong></td></tr>
+            <tr><td>Participantes ahora</td><td><strong>${s.activeParticipants||0}</strong></td></tr>
+            <tr><td>Uso de CPU</td><td><strong>${(s.cpu||0).toFixed(1)}%</strong></td></tr>
+            <tr><td>Uso de RAM</td><td><strong>${(s.memory||0).toFixed(1)}%</strong></td></tr>
+            <tr><td>Uptime del servidor</td><td><strong>${fmtUptime(s.uptime||0)}</strong></td></tr>
+          </table>
+        </div>
+        <div class="section" style="margin-top:16px">
+          <h3>Prometheus</h3>
+          <p style="color:#64748b;font-size:.85rem">Endpoint de metricas disponible en <a href="/metrics" target="_blank" style="color:#3b82f6">/metrics</a> para scraping por Prometheus.</p>
+        </div>`;
+      drawGaugeChart('cpuChart', s.cpu || 0, '#3b82f6', 'CPU');
+      drawGaugeChart('memChart', s.memory || 0, '#8b5cf6', 'RAM');
+    }
+
+    function drawGaugeChart(id, value, color, label) {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.parentElement.clientWidth;
+      const h = canvas.parentElement.clientHeight;
+      canvas.width = w * 2; canvas.height = h * 2;
+      ctx.scale(2, 2);
+      const cx = w/2, cy = h/2 + 20, r = Math.min(w,h) * 0.38;
+      const startAngle = Math.PI * 0.8, endAngle = Math.PI * 2.2;
+      const valAngle = startAngle + (endAngle - startAngle) * (value / 100);
+      // Background arc
+      ctx.beginPath(); ctx.arc(cx, cy, r, startAngle, endAngle);
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.stroke();
+      // Value arc
+      ctx.beginPath(); ctx.arc(cx, cy, r, startAngle, valAngle);
+      ctx.strokeStyle = color; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.stroke();
+      // Text
+      ctx.fillStyle = '#f1f5f9'; ctx.font = 'bold 24px Inter'; ctx.textAlign = 'center';
+      ctx.fillText(`${value.toFixed(1)}%`, cx, cy - 4);
+      ctx.fillStyle = '#64748b'; ctx.font = '12px Inter';
+      ctx.fillText(label, cx, cy + 16);
+    }
+
+    async function setQoS(roomId, priority) {
+      await fetch('/api/admin/qos', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({roomId, priority: parseInt(priority)})
+      });
+      fetchData();
+    }
+
+    async function fetchData() {
+      try {
+        const [sysRes, roomsRes] = await Promise.all([
+          fetch('/api/admin/system'), fetch('/api/admin/rooms')
+        ]);
+        if (sysRes.status === 401 || roomsRes.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        systemData = await sysRes.json();
+        roomsData = await roomsRes.json();
+        render();
+      } catch (e) { console.error('Fetch error', e); }
+    }
+
+    fetchData();
+    setInterval(fetchData, 5000);
+  </script>
+</body>
+</html>

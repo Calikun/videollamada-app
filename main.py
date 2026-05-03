@@ -1,9 +1,13 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi.responses import HTMLResponse, JSONResponse
 from typing import Dict
 import json
 import uuid
 import logging
+
+from database import engine, SessionLocal, Base
+from models import Usuario
+from sqlalchemy.orm import Session
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("videollamada")
@@ -13,6 +17,127 @@ app = FastAPI()
 rooms: Dict[str, Dict] = {}
 
 
+# ── Crear las tablas al iniciar la aplicación ──────────────────────────────
+@app.on_event("startup")
+async def startup():
+    """Crea las tablas en PostgreSQL si no existen."""
+    Base.metadata.create_all(bind=engine)
+    logger.info("Tablas creadas / verificadas en PostgreSQL.")
+
+
+# ── Helpers de base de datos ───────────────────────────────────────────────
+def registrar_usuario_db(user_id: str, nombre: str, rol: str, room_id: str):
+    """Registra o actualiza un usuario en la base de datos."""
+    db = SessionLocal()
+    try:
+        usuario = db.query(Usuario).filter(Usuario.user_id == user_id).first()
+        if usuario:
+            usuario.nombre = nombre
+            usuario.rol = rol
+            usuario.room_id = room_id
+            usuario.conectado = "si"
+        else:
+            usuario = Usuario(
+                user_id=user_id,
+                nombre=nombre,
+                rol=rol,
+                room_id=room_id,
+                conectado="si"
+            )
+            db.add(usuario)
+        db.commit()
+        logger.info(f"Usuario {nombre} ({user_id}) registrado en BD con rol '{rol}'")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error registrando usuario en BD: {e}")
+    finally:
+        db.close()
+
+
+def desconectar_usuario_db(user_id: str):
+    """Marca un usuario como desconectado en la base de datos."""
+    db = SessionLocal()
+    try:
+        usuario = db.query(Usuario).filter(Usuario.user_id == user_id).first()
+        if usuario:
+            usuario.conectado = "no"
+            usuario.room_id = None
+            db.commit()
+            logger.info(f"Usuario {user_id} marcado como desconectado en BD")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error desconectando usuario en BD: {e}")
+    finally:
+        db.close()
+
+
+# ── Endpoints REST para consultar usuarios ─────────────────────────────────
+@app.get("/api/usuarios")
+async def listar_usuarios():
+    """Retorna todos los usuarios registrados en la base de datos."""
+    db = SessionLocal()
+    try:
+        usuarios = db.query(Usuario).all()
+        return [
+            {
+                "id": u.id,
+                "user_id": u.user_id,
+                "nombre": u.nombre,
+                "rol": u.rol,
+                "room_id": u.room_id,
+                "conectado": u.conectado,
+                "created_at": str(u.created_at) if u.created_at else None,
+                "updated_at": str(u.updated_at) if u.updated_at else None,
+            }
+            for u in usuarios
+        ]
+    finally:
+        db.close()
+
+
+@app.get("/api/usuarios/conectados")
+async def listar_usuarios_conectados():
+    """Retorna solo los usuarios actualmente conectados."""
+    db = SessionLocal()
+    try:
+        usuarios = db.query(Usuario).filter(Usuario.conectado == "si").all()
+        return [
+            {
+                "id": u.id,
+                "user_id": u.user_id,
+                "nombre": u.nombre,
+                "rol": u.rol,
+                "room_id": u.room_id,
+            }
+            for u in usuarios
+        ]
+    finally:
+        db.close()
+
+
+@app.get("/api/usuarios/{user_id}")
+async def obtener_usuario(user_id: str):
+    """Retorna un usuario específico por su user_id."""
+    db = SessionLocal()
+    try:
+        usuario = db.query(Usuario).filter(Usuario.user_id == user_id).first()
+        if not usuario:
+            return JSONResponse(status_code=404, content={"detail": "Usuario no encontrado"})
+        return {
+            "id": usuario.id,
+            "user_id": usuario.user_id,
+            "nombre": usuario.nombre,
+            "rol": usuario.rol,
+            "room_id": usuario.room_id,
+            "conectado": usuario.conectado,
+            "created_at": str(usuario.created_at) if usuario.created_at else None,
+            "updated_at": str(usuario.updated_at) if usuario.updated_at else None,
+        }
+    finally:
+        db.close()
+
+
+# ── Utilidades WebSocket ───────────────────────────────────────────────────
 async def safe_send(ws: WebSocket, data: str) -> bool:
     """Envía un mensaje a un WebSocket. Retorna False si falla."""
     try:
@@ -53,6 +178,9 @@ async def cleanup_user(room: Dict, room_id: str, websocket: WebSocket, user_id: 
     if user_id in room["muted"]:
         del room["muted"][user_id]
 
+    # Marcar como desconectado en la base de datos
+    desconectar_usuario_db(user_id)
+
     # Transferir host si es necesario
     if room["host_id"] == user_id and room["user_ids"]:
         new_host_id = next(iter(room["user_ids"]))
@@ -86,6 +214,7 @@ async def cleanup_user(room: Dict, room_id: str, websocket: WebSocket, user_id: 
         logger.info(f"Sala {room_id} eliminada (vacía)")
 
 
+# ── Rutas HTML ─────────────────────────────────────────────────────────────
 @app.get("/")
 async def get_index():
     with open("index.html", "r", encoding="utf-8") as f:
@@ -100,6 +229,7 @@ async def get_room(room_id: str):
     return HTMLResponse(content=html)
 
 
+# ── WebSocket principal ───────────────────────────────────────────────────
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     await websocket.accept()
@@ -116,6 +246,9 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
         name = "Anónimo"
         role = ""
         username = "Anónimo"
+
+    # ── Registrar usuario con su rol en la base de datos ──
+    registrar_usuario_db(user_id, name, role, room_id)
 
     if room_id not in rooms:
         rooms[room_id] = {
@@ -191,7 +324,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
                             "userId": target_id,
                             "muted": mute_state
                         })
-                        logger.info(f"Host {username} {'silenciÃ³' if mute_state else 'activÃ³'} a {target_id}")
+                        logger.info(f"Host {username} {'silenció' if mute_state else 'activó'} a {target_id}")
                 continue
 
             if msg_type == "host-kick":
